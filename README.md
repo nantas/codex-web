@@ -1,57 +1,59 @@
 # Codex Web MVP (HTTP Polling)
 
-A minimal control console for Codex sessions with:
+Minimal self-hosted control console with:
 
-- GitHub OAuth login (Auth.js)
-- Session creation and lookup APIs
-- Operation submit + HTTP polling status
-- Approval queue decision endpoint
-- Next.js App Router frontend pages for sessions and detail view
+- GitHub OAuth sign-in (Auth.js)
+- Session and operation APIs
+- HTTP polling operation status
+- Approval decision endpoint
 
-## Requirements
-
-- Node.js 24+
-- pnpm 10+
-
-## Environment Setup
+## Quick Start (Host)
 
 ```bash
 cp .env.example .env
-```
-
-Set these values in `.env`:
-
-- `DATABASE_URL` (default: `file:./dev.db`)
-- `NEXTAUTH_SECRET`
-- `GITHUB_ID`
-- `GITHUB_SECRET`
-
-## Install and Database Init
-
-```bash
 pnpm install
 pnpm prisma migrate dev
-```
-
-## Run
-
-```bash
 pnpm dev
 ```
 
-Open `http://localhost:3000/sessions`.
-Open `http://localhost:43173/sessions` or your Tailscale URL.
+Default runtime in this repo:
 
-Open GitHub OAuth in your local browser:
+- Host/port: `0.0.0.0:43173`
 
-```bash
-pnpm oauth:github
+## Required `.env` (Sanitized Template)
+
+```env
+DATABASE_URL="file:./dev.db"
+APP_URL="http://<YOUR_TAILSCALE_HOST>:43173"
+NEXTAUTH_URL="http://<YOUR_TAILSCALE_HOST>:43173"
+NEXTAUTH_SECRET="<RANDOM_32B_PLUS_SECRET>"
+GITHUB_ID="<YOUR_GITHUB_CLIENT_ID>"
+GITHUB_SECRET="<YOUR_GITHUB_CLIENT_SECRET>"
 ```
 
-The command uses `APP_URL` first, then `NEXTAUTH_URL`, then defaults to `http://localhost:43173`.
-It opens the Auth.js sign-in page and then you click "Sign in with GitHub".
+Generate `NEXTAUTH_SECRET`:
 
-## Test and Quality
+```bash
+openssl rand -base64 32
+```
+
+## Remote Access
+
+From another machine in the same tailnet:
+
+- `http://<YOUR_TAILSCALE_HOST>:43173/sessions`
+- `http://<YOUR_TAILSCALE_HOST>:43173/api/health`
+
+## Start OAuth Sign-In
+
+Use either:
+
+- Direct URL: `http://<YOUR_TAILSCALE_HOST>:43173/api/auth/signin?callbackUrl=%2Fsessions`
+- Helper command: `pnpm oauth:github`
+
+`pnpm oauth:github` opens a browser on the machine where it is executed.
+
+## Test Commands
 
 ```bash
 pnpm lint
@@ -60,18 +62,8 @@ pnpm test
 pnpm test:e2e
 ```
 
-## API Endpoints (MVP)
+## Full Guide
 
-- `GET /api/health`
-- `POST /api/v1/sessions`
-- `POST /api/v1/operations`
-- `GET /api/v1/operations/:operationId`
-- `POST /api/v1/operations/:operationId/interrupt`
-- `POST /api/v1/approvals/:approvalId/decision`
-- `GET|POST /api/auth/[...nextauth]`
+See:
 
-## Notes
-
-- This MVP uses a single-process in-app runner manager abstraction.
-- UI reads backend state via HTTP polling only (no streaming sockets).
-- Runtime integration assumes host-installed `codex` CLI in later phases.
+- `docs/guides/host-remote-access-and-auth.md`
