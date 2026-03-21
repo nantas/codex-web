@@ -67,3 +67,6 @@ pnpm test:e2e
 See:
 
 - `docs/guides/host-remote-access-and-auth.md`
+- `docs/architecture/tech-stack-overview.md`
+- `docs/architecture/solution-design-overview.md`
+- `docs/progress/project-progress.md`
