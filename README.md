@@ -41,6 +41,14 @@ pnpm dev
 
 Open `http://localhost:3000/sessions`.
 
+Open GitHub OAuth in your local browser:
+
+```bash
+pnpm oauth:github
+```
+
+The command uses `APP_URL` first, then `NEXTAUTH_URL`, then defaults to `http://localhost:3000`.
+
 ## Test and Quality
 
 ```bash

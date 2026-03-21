@@ -10,6 +10,7 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "oauth:github": "node scripts/open-oauth-url.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
