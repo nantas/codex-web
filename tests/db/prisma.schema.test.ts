@@ -4,6 +4,11 @@ import { PrismaClient } from "@prisma/client";
 describe("prisma schema", () => {
   it("can persist user/session/operation/approval minimal records", async () => {
     const prisma = new PrismaClient();
+    await prisma.approval.deleteMany();
+    await prisma.operation.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.user.deleteMany();
+
     const user = await prisma.user.create({
       data: { githubId: "1001", email: "mvp@example.com", name: "MVP User" },
     });
