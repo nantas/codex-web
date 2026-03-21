@@ -49,6 +49,7 @@ pnpm oauth:github
 ```
 
 The command uses `APP_URL` first, then `NEXTAUTH_URL`, then defaults to `http://localhost:43173`.
+It opens the Auth.js sign-in page and then you click "Sign in with GitHub".
 
 ## Test and Quality
 

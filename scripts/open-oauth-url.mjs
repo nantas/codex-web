@@ -5,7 +5,7 @@ import path from "node:path";
 export function buildGithubOauthUrl({ appUrl, nextAuthUrl }) {
   const base = normalizeBaseUrl(appUrl ?? nextAuthUrl ?? "http://localhost:43173");
   const callbackUrl = encodeURIComponent("/sessions");
-  return `${base}/api/auth/signin/github?callbackUrl=${callbackUrl}`;
+  return `${base}/api/auth/signin?callbackUrl=${callbackUrl}`;
 }
 
 function normalizeBaseUrl(raw) {
