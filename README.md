@@ -40,6 +40,7 @@ pnpm dev
 ```
 
 Open `http://localhost:3000/sessions`.
+Open `http://localhost:43173/sessions` or your Tailscale URL.
 
 Open GitHub OAuth in your local browser:
 
@@ -47,7 +48,7 @@ Open GitHub OAuth in your local browser:
 pnpm oauth:github
 ```
 
-The command uses `APP_URL` first, then `NEXTAUTH_URL`, then defaults to `http://localhost:3000`.
+The command uses `APP_URL` first, then `NEXTAUTH_URL`, then defaults to `http://localhost:43173`.
 
 ## Test and Quality
 

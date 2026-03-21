@@ -11,7 +11,7 @@ describe("buildGithubOauthUrl", () => {
     ).toBe("https://app.example.com/api/auth/signin/github?callbackUrl=%2Fsessions");
 
     expect(buildGithubOauthUrl({ appUrl: undefined, nextAuthUrl: undefined })).toBe(
-      "http://localhost:3000/api/auth/signin/github?callbackUrl=%2Fsessions",
+      "http://localhost:43173/api/auth/signin/github?callbackUrl=%2Fsessions",
     );
   });
 });
