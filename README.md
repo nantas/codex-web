@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Codex Web MVP (HTTP Polling)
 
-## Getting Started
+A minimal control console for Codex sessions with:
 
-First, run the development server:
+- GitHub OAuth login (Auth.js)
+- Session creation and lookup APIs
+- Operation submit + HTTP polling status
+- Approval queue decision endpoint
+- Next.js App Router frontend pages for sessions and detail view
+
+## Requirements
+
+- Node.js 24+
+- pnpm 10+
+
+## Environment Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set these values in `.env`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `DATABASE_URL` (default: `file:./dev.db`)
+- `NEXTAUTH_SECRET`
+- `GITHUB_ID`
+- `GITHUB_SECRET`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Install and Database Init
 
-## Learn More
+```bash
+pnpm install
+pnpm prisma migrate dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Run
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open `http://localhost:3000/sessions`.
 
-## Deploy on Vercel
+## Test and Quality
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:e2e
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## API Endpoints (MVP)
+
+- `GET /api/health`
+- `POST /api/v1/sessions`
+- `POST /api/v1/operations`
+- `GET /api/v1/operations/:operationId`
+- `POST /api/v1/operations/:operationId/interrupt`
+- `POST /api/v1/approvals/:approvalId/decision`
+- `GET|POST /api/auth/[...nextauth]`
+
+## Notes
+
+- This MVP uses a single-process in-app runner manager abstraction.
+- UI reads backend state via HTTP polling only (no streaming sockets).
+- Runtime integration assumes host-installed `codex` CLI in later phases.
