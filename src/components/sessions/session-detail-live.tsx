@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ApprovalCard from "@/components/sessions/approval-card";
 import { computeLogPollDelayMs } from "@/components/sessions/log-poll-backoff";
 import SessionDetailConsole from "@/components/sessions/session-detail-console";
+import SessionTurnComposer from "@/components/sessions/session-turn-composer";
 import {
   buildSessionDetailUrlQuery,
   type SessionDetailUrlState,
@@ -82,6 +83,22 @@ async function postApprovalDecision(approvalId: string, decision: "approve" | "d
   }
 }
 
+async function postTurnStart(sessionId: string, text: string) {
+  const response = await fetch("/api/v1/operations", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      type: "turn.start",
+      input: [{ type: "text", text }],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to submit turn");
+  }
+}
+
 async function fetchOperationLogs(
   operationId: string,
   filter: LogFilterInput,
@@ -123,6 +140,7 @@ export default function SessionDetailLive({
 }) {
   const historyPageSize = 5;
   const [data, setData] = useState<SessionDetailData>(initialData);
+  const [submittingTurn, setSubmittingTurn] = useState(false);
   const [submittingApprovalId, setSubmittingApprovalId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [historyPage, setHistoryPage] = useState(initialUrlState?.page ?? 1);
@@ -205,6 +223,20 @@ export default function SessionDetailLive({
       setErrorMessage("Failed to submit approval decision.");
     } finally {
       setSubmittingApprovalId(null);
+    }
+  }
+
+  async function handleTurnSubmit(text: string) {
+    try {
+      setSubmittingTurn(true);
+      await postTurnStart(sessionId, text);
+      await refresh();
+      setErrorMessage(null);
+      setHistoryPage(1);
+    } catch {
+      setErrorMessage("Failed to submit turn.");
+    } finally {
+      setSubmittingTurn(false);
     }
   }
 
@@ -374,6 +406,8 @@ export default function SessionDetailLive({
             : null
         }
       />
+
+      <SessionTurnComposer disabled={submittingTurn} onSubmit={handleTurnSubmit} />
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Operation History</h2>

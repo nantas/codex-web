@@ -89,6 +89,74 @@ describe("SessionDetailLive", () => {
     });
   });
 
+  it("submits a new turn from composer and refreshes operations", async () => {
+    const fetchMock = vi.spyOn(global, "fetch");
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ operationId: "op_new", status: "running", pollAfterMs: 1000 }), {
+        status: 202,
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          session: {
+            id: "ses_send",
+            status: "running",
+            workspaceId: "ws-send",
+            cwd: "/tmp/ws-send",
+            threadId: "thr_send",
+            updatedAt: "2026-03-21T00:00:00.000Z",
+          },
+          operations: [
+            {
+              id: "op_new",
+              status: "running",
+              requestText: "new turn",
+              resultText: null,
+              errorMessage: null,
+              updatedAt: "2026-03-21T00:00:00.000Z",
+              approvals: [],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(
+      <SessionDetailLive
+        sessionId="ses_send"
+        initialData={{
+          session: {
+            id: "ses_send",
+            status: "running",
+            workspaceId: "ws-send",
+            cwd: "/tmp/ws-send",
+            threadId: "thr_send",
+            updatedAt: "2026-03-21T00:00:00.000Z",
+          },
+          operations: [],
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Turn Message"), { target: { value: "new turn" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/operations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "ses_send",
+          type: "turn.start",
+          input: [{ type: "text", text: "new turn" }],
+        }),
+      });
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/sessions/ses_send", { cache: "no-store" });
+    });
+  });
+
   it("renders operation history with request/result/error details", () => {
     render(
       <SessionDetailLive
