@@ -76,6 +76,15 @@ Alternative terminal states: `failed`, `interrupted`.
 - modern `thread/read` 对 rollout 瞬态加载错误（`failed to load rollout ... empty session file`）同样按可重试处理，降低启动抖动带来的误失败。
 - modern 审批恢复优先走 server-request 原生语义：对 `requestApproval` 通知里的 `id` 回写 `result`（如 `accept`）后继续同一 turn；仅在无 modern token 时回退 legacy `turn.resume`。
 
+## Phase 2 Entry Gate
+
+进入下一轮功能开发前，必须同时满足以下门槛：
+
+1. failure-path diagnostics 已落地（超时异常包含 thread/turn/notification 诊断摘要）。
+2. `pnpm validate:real-codex` 为绿色，且验证口径包含 `waitingApproval -> deny -> failed`。
+3. transient signature registry 已落地并接入重试判定单点（`transient-error-signatures.ts`）。
+4. CI 基线全绿：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm test:e2e`。
+
 ## Approval Queue Behavior
 
 When an operation requires approval:

@@ -19,6 +19,15 @@
 1. `docs/plans/2026-03-22-codex-execution-unclosed-items-implementation-plan.md`（当前未收口项实施主计划）
 2. `docs/plans/2026-03-22-codex-cli-execution-chain-implementation-plan.md`（执行链路 Phase 1 计划，作为上下文参考）
 
+## Phase 2 Entry Gate
+
+开始 Phase 2 功能开发前，必须先满足：
+
+1. failure-path diagnostics 已上线（超时含 thread/turn/request 诊断摘要）。
+2. `pnpm validate:real-codex` 通过（`waitingApproval -> deny -> failed`）。
+3. transient signature registry 已集中治理并生效。
+4. `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm test:e2e` 全绿。
+
 ## 历史计划（只读）
 
 - `docs/plans/2026-03-21-codex-web-mvp-http-polling.md`

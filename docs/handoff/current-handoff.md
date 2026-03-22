@@ -1,6 +1,6 @@
 # 当前交接入口（Canonical Handoff Entry）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十九批）
+更新时间：2026-03-22（Codex CLI Phase 2 稳定性准备第一批）
 
 ## 当前状态
 
@@ -9,6 +9,22 @@
 - 当前主计划：`docs/plans/2026-03-22-codex-execution-unclosed-items-implementation-plan.md`
 
 ## 本次交接摘要
+
+- 已完成 Phase 2 稳定性准备第一批（Task 1-4）：
+  - failure-path diagnostics：超时异常增加 `diag`（thread/turn/notification/thread-read 时间摘要）。
+  - 新增可执行验收脚本：`pnpm validate:real-codex`（`waitingApproval -> deny -> failed`）。
+  - 重试治理集中化：引入 transient signature registry（`transient-error-signatures.ts`）并接入单点判定。
+  - 文档新增 `Phase 2 Entry Gate`（mvp-runtime / plans README）并定义准入门槛。
+- 本批提交：
+  - `a431a13` `feat: add failure-path app-server diagnostic context`
+  - `5f35b63` `feat: add executable real codex approval smoke validation`
+  - `2ec1e11` `refactor: centralize app-server transient retry signatures`
+- 本批验证：
+  - `pnpm exec vitest run tests/codex/codex-cli-app-server-client.test.ts --maxWorkers=1` 通过。
+  - `pnpm exec vitest run tests/e2e/real-codex-validation.test.ts --maxWorkers=1` 通过。
+  - `pnpm exec vitest run tests/codex/transient-error-signatures.test.ts --maxWorkers=1` 通过。
+  - `pnpm validate:real-codex` 通过（实测输出 `waitingApproval` 后 `deny` 收敛到 `failed`）。
+- 下一步：继续 Task 5（全量回归、残余风险记录、最终文档收口）。
 
 - 审批决策路由已补齐 `deny` 协议清理：
   - `POST /api/v1/approvals/:approvalId/decision` 在 `deny` 时也调用 `resumeAfterApproval(decision=deny)`；

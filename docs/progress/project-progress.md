@@ -1,6 +1,21 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十九批已完成）
+更新时间：2026-03-22（Codex CLI Phase 2 稳定性准备第一批）
+
+## 本次补充更新（2026-03-22，Phase 2 稳定性准备第一批）
+
+- 改动摘要：
+  - Task 1：失败路径事件级诊断日志落地，超时异常增加 `diag` 字段（`threadId/turnId/lastNotificationMethod/lastThreadReadAt`）。
+  - Task 2：新增真实后端可执行验收脚本 `pnpm validate:real-codex`，并在 README 固化通过口径（`waitingApproval -> deny -> failed`）。
+  - Task 3：引入 transient signature registry（`src/server/codex/app-server/transient-error-signatures.ts`）并集中接管 app-server 重试判定。
+  - Task 4：在 `docs/architecture/mvp-runtime.md` 与 `docs/plans/README.md` 新增 `Phase 2 Entry Gate` 准入门槛。
+- 验证结果：
+  - `pnpm exec vitest run tests/codex/codex-cli-app-server-client.test.ts --maxWorkers=1` 通过。
+  - `pnpm exec vitest run tests/e2e/real-codex-validation.test.ts --maxWorkers=1` 通过。
+  - `pnpm exec vitest run tests/codex/transient-error-signatures.test.ts --maxWorkers=1` 通过。
+  - `pnpm validate:real-codex` 通过（输出 `statusBeforeDecision=waitingApproval`、`finalStatus=failed`）。
+- 后续待办：
+  - 执行 Task 5：完成全量回归（lint/typecheck/test/test:e2e/validate）并回填 commit 证据、残余风险与回滚说明。
 
 ## 本次补充更新（2026-03-22，第二十九批收口）
 
