@@ -734,7 +734,11 @@ function isTransientThreadReadState(error: unknown) {
   }
 
   const lower = error.message.toLowerCase();
-  return lower.includes("not materialized yet") || lower.includes("includeTurns is unavailable".toLowerCase());
+  return (
+    lower.includes("not materialized yet") ||
+    lower.includes("includeturns is unavailable") ||
+    (lower.includes("failed to load rollout") && lower.includes("empty session file"))
+  );
 }
 
 async function sleep(ms: number) {

@@ -300,6 +300,84 @@ describe("CodexCliAppServerClient modern approval detection", () => {
     });
   });
 
+  it("retries transient empty rollout session-file error before mapping approval", async () => {
+    const manager = new AppServerProcessManager();
+    let readCount = 0;
+
+    vi.spyOn(manager, "getOrStart").mockResolvedValue({
+      id: "pm_3b",
+      endpoint: "stdio://fake",
+      pid: 1006,
+    });
+
+    vi.spyOn(manager, "sendRequest").mockImplementation(async ({ method }) => {
+      if (method === "initialize") {
+        return {};
+      }
+      if (method === "thread/start") {
+        return { thread: { id: "thread-modern-3b" } };
+      }
+      if (method === "turn/start") {
+        return {
+          turn: {
+            id: "turn-modern-3b",
+            status: "inProgress",
+            items: [],
+            error: null,
+          },
+        };
+      }
+      if (method === "thread/read") {
+        readCount += 1;
+        if (readCount === 1) {
+          throw new AppServerClientError(
+            "execution",
+            "failed to load rollout `/tmp/rollout.jsonl` for thread t-1: empty session file",
+          );
+        }
+        return {
+          thread: {
+            status: { type: "active", activeFlags: ["waitingOnApproval"] },
+            turns: [
+              {
+                id: "turn-modern-3b",
+                status: "inProgress",
+                items: [],
+                error: null,
+              },
+            ],
+          },
+        };
+      }
+
+      throw new Error(`unexpected method: ${method}`);
+    });
+
+    vi.spyOn(manager, "waitForNotification").mockImplementation(
+      async () =>
+        new Promise(() => {
+          // keep pending; this test validates transient retry path
+        }),
+    );
+
+    const client = new CodexCliAppServerClient(manager);
+    const event = await client.startTurn({
+      operationId: "op-modern-approval-3b",
+      workspaceId: "ws-modern-approval-3b",
+      cwd: process.cwd(),
+      sessionId: "ses-modern-approval-3b",
+      threadId: "thr-modern-approval-3b",
+      text: "transient rollout empty-session-file path",
+    });
+
+    expect(readCount).toBeGreaterThanOrEqual(2);
+    expect(event).toMatchObject({
+      id: "turn-modern-3b",
+      type: "turn.approval_required",
+      kind: "commandExecution",
+    });
+  });
+
   it("resumes modern approval by replying to server request id", async () => {
     const manager = new AppServerProcessManager();
     let readCount = 0;

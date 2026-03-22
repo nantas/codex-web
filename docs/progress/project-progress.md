@@ -1,6 +1,20 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十八批已完成）
+更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十九批已完成）
+
+## 本次补充更新（2026-03-22，第二十九批收口）
+
+- 改动摘要：
+  - 将 `failed to load rollout ... empty session file` 纳入 modern `thread/read` 的 transient 可重试错误，避免 app-server 启动抖动时 operation 直接失败。
+  - 保持既有 timeout guard（deadline 后最终快照兜底）与审批通知匹配放宽逻辑，形成完整稳定性收敛。
+- 验证结果：
+  - `pnpm exec vitest run tests/codex/codex-cli-app-server-client.test.ts --maxWorkers=1` 通过（1 file, 7 passed）。
+  - `pnpm lint`、`pnpm typecheck`、`DATABASE_URL='file:/Users/nantas-agent/projects/codex-web/prisma/dev.db' pnpm test -- --maxWorkers=1`、`pnpm test:e2e` 全部通过（31 files, 80 passed；e2e 1 passed）。
+  - 实机稳定性压测（`localhost:43173`）：
+    - 第一轮 8 次：`waitingApproval=6`，发现 `empty session file` 失败 2 次，`APP_SERVER_TIMEOUT=0`。
+    - 修复后第二轮 6 次：`waitingApproval=6`，`APP_SERVER_TIMEOUT=0`，`empty session file=0`。
+- 后续待办：
+  - 继续观察长时间运行后是否仍出现新的 app-server 启动瞬态错误；若出现，再补充错误签名与重试策略白名单。
 
 ## 0. 本次补充更新（2026-03-22，第二十八批收口）
 
