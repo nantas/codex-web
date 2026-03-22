@@ -9,16 +9,19 @@ describe.skipIf(!process.env.RUN_CODEX_INTEGRATION)("codex app-server integratio
     const gateway = new CodexAppServerGateway();
     await gateway.ensureRunner({ workspaceId: "ws-integration", cwd: process.cwd() });
 
-    const result = await gateway.startTurn({
-      operationId: "op-integration",
-      workspaceId: "ws-integration",
+      const result = await gateway.startTurn({
+        operationId: "op-integration",
+        workspaceId: "ws-integration",
       cwd: process.cwd(),
       sessionId: "ses-integration",
       threadId: "thr-integration",
       text: "Reply with exactly: integration-ok",
-    });
+      });
 
       expect(["completed", "failed", "running", "waitingApproval"]).toContain(result.status);
+      if (result.status === "completed") {
+        expect(typeof result.resultText).toBe("string");
+      }
     },
   );
 });

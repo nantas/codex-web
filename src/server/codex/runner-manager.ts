@@ -14,6 +14,7 @@ export class RunnerManager {
       cwd: input.cwd,
       endpoint: null,
       pid: null,
+      processHandleId: null,
       status: "starting",
       lastSeenAt: null,
     };
@@ -34,6 +35,22 @@ export class RunnerManager {
     runtime.status = "ready";
     runtime.endpoint = input?.endpoint ?? runtime.endpoint;
     runtime.pid = input?.pid ?? runtime.pid;
+    runtime.lastSeenAt = new Date().toISOString();
+  }
+
+  bindProcessMeta(
+    workspaceId: string,
+    input: { endpoint?: string | null; pid?: number | null; processHandleId?: string | null },
+  ) {
+    const runtime = this.byWorkspace.get(workspaceId);
+    if (!runtime) {
+      return;
+    }
+
+    runtime.endpoint = input.endpoint ?? runtime.endpoint;
+    runtime.pid = input.pid ?? runtime.pid;
+    runtime.processHandleId = input.processHandleId ?? runtime.processHandleId;
+    runtime.status = "ready";
     runtime.lastSeenAt = new Date().toISOString();
   }
 

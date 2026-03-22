@@ -1,25 +1,25 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（H1 stabilization retrofit 已完成）
+更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十批已完成）
 
-## 0. 本次补充更新（2026-03-22，H1 stabilization retrofit）
+## 0. 本次补充更新（2026-03-22，第二十批未收口项收口）
 
 - 改动摘要：
-  - 新增统一任务发现入口：`docs/plans/README.md`。
-  - 新增独立交接入口：`docs/handoff/current-handoff.md`，并与进度回填字段对齐。
-  - 更新 `AGENTS.md` 与 `README.md`，声明 canonical task/handoff/progress 路径。
-  - 本轮仅进行文档治理改造，不涉及业务代码改动，不重写历史计划文档。
+  - 完成未收口计划 Task 1-6：app-server 协议骨架、workspace 进程管理、gateway app-server first + exec fallback、审批 continuation token 贯通、协议优先 interrupt 回退、网页 `Send Turn` 入口。
+  - 会话详情页新增 `Send Turn` composer，直接触发 `POST /api/v1/operations` 并刷新历史列表。
+  - 架构/运行文档同步：README、`mvp-runtime`、`solution-design-overview`、`tech-stack-overview` 更新为当前真实行为。
 - 验证结果：
-  - 文档一致性检查通过：`AGENTS.md`、`README.md`、`docs/plans/README.md`、`docs/handoff/current-handoff.md`、`docs/progress/project-progress.md` 中 canonical 路径可互相定位。
-  - 变更范围检查：`git diff --name-only` 仅包含文档文件变更。
+  - 单测/集成：新增 codex/app-server 与服务链路测试通过。
+  - UI/E2E：`session-detail-live` 新增 turn 提交用例通过；`mvp-flow` 覆盖网页发送 turn 流程通过。
 - 后续待办：
-  - 后续任务执行完成后，持续保持 `docs/progress/project-progress.md` 与 `docs/handoff/current-handoff.md` 的更新时间、改动摘要与验证结果同步。
+  - 继续推进 workspace 常驻 app-server 协议化（真实长连接通道）。
+  - 将 integration guard 测试推进为默认稳定执行。
 
 ## 1. 总体状态
 
 - 阶段：MVP 已完成（可运行、可登录、可轮询、可审批）
 - 当前分支：`main`
-- 状态：真实执行链路 Phase 1 已落地（`codex exec`），进入“未收口项补全”阶段
+- 状态：真实执行链路 Phase 1 关键未收口项（Task 1-6）已收口，进入“常驻 app-server 协议化”阶段
 
 ## 2. 本次更新（2026-03-22）
 
@@ -56,6 +56,10 @@
   - 第十九批（本次完成）：补齐文档收口（README 预检增加 `codex login`、集成验证命令；进度状态与未完成项同步真实现状）。
   - 第十九批（本次完成）：完成 `EXECUTION_BACKEND=codex` 在线人工验证（健康检查、真实执行、审批 approve/deny、中断、日志查询）并记录结果。
   - 第十九批（本次完成）：产出未收口项执行计划文档 `docs/plans/2026-03-22-codex-execution-unclosed-items-implementation-plan.md`。
+  - 第二十批（本次完成）：完成 app-server 协议骨架与 workspace 进程管理器，gateway 切换为 app-server first + exec fallback。
+  - 第二十批（本次完成）：审批 continuation token 贯通（runner result -> execution registry -> resumeAfterApproval）并补齐 API/Service 测试。
+  - 第二十批（本次完成）：interrupt 路径升级为协议优先 + 信号回退，新增 codex interrupt 单测与 waitingApproval interrupt API 用例。
+  - 第二十批（本次完成）：会话详情新增网页 `Send Turn` 组件，补齐 UI 测试与 E2E 用例（真实页面提交对话）。
   - 新增 `pollIntervalMs` 组件参数用于稳定测试与轮询行为控制。
   - 新增 `session-detail-url-state` 解析/序列化工具，统一 URL 状态处理逻辑。
   - `OperationLogService.list` 新增 `level/time-range` 过滤能力，与 cursor 查询可组合使用。
@@ -83,6 +87,9 @@
   - 第十八批验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test`（24 passed, 1 skipped）、`pnpm test:e2e`（1 passed）。
   - 第十八批集成验证通过：`RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm test -- tests/codex/codex-app-server-gateway.integration.test.ts`（通过）。
   - 第十九批在线验证通过：`EXECUTION_BACKEND=codex` 运行下，`POST /api/v1/operations` 返回真实结果（`CODERUN_OK`），审批 `approve/deny` 与 `interrupt` 路径状态收敛正确，`/api/v1/operations/:id/logs` 可读。
+  - 第二十批验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test`（64 passed, 1 skipped）、`pnpm test:e2e`（1 passed）。
+  - 第二十批专项通过：`pnpm exec vitest run tests/codex/codex-app-server-interrupt.test.ts tests/services/operation-execution.service.test.ts tests/ui/session-detail-live.test.tsx`。
+  - 第二十批集成验证通过：`RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts`。
 - 后续待办：
   - 继续推进未收口项：workspace 常驻 app-server 协议、真实审批触发事件、resume 语义与常驻线程一致化。
   - 增加 operation 历史筛选与搜索能力。
@@ -154,18 +161,14 @@
 
 - `pnpm lint`：通过
 - `pnpm typecheck`：通过
-- `pnpm test`：通过（20 files, 43 tests）
+- `pnpm test`：通过（28 files, 64 passed, 1 skipped）
 - `pnpm test:e2e`：通过（1 test）
-
-## 9. 当前验证状态（第十五批文档更新）
-
-- 文档校验：已新增设计与执行方案文档并纳入 `docs/plans`。
-- 代码行为：无新增代码实现（仅方案与进度文档更新）。
+- `RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts`：通过
 
 ## 7. 未完成/后续工作
 
-- 真实 Codex CLI 已接入 `codex exec` 路径；workspace 常驻 app-server 协议尚未接入
-- 前端会话/详情已具备自动刷新与审批即时交互，仍缺完整执行日志展示
+- 真实 Codex CLI 已接入 `app-server first + exec fallback`；workspace 常驻 app-server 协议尚未接入
+- 前端会话/详情已具备自动刷新、审批与网页发送 turn，仍需补齐更多生产级可观测性与异常恢复手册
 - 生产部署（HTTPS、反向代理、监控告警）尚未标准化
 
 ## 8. 建议下一阶段（P1）

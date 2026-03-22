@@ -1,3 +1,4 @@
+import type { AppServerClient } from "@/server/codex/app-server/client";
 import { CodexAppServerGateway } from "@/server/codex/backends/codex-app-server-gateway";
 import { MockRunnerGateway } from "@/server/codex/backends/mock-runner-gateway";
 import { getExecutionBackend, type ExecutionBackend } from "@/server/runtime/execution-config";
@@ -5,7 +6,7 @@ import { getExecutionBackend, type ExecutionBackend } from "@/server/runtime/exe
 export type TurnExecutionResult =
   | { status: "completed"; resultText: string }
   | { status: "failed"; errorMessage: string }
-  | { status: "waitingApproval"; kind: string; prompt: string }
+  | { status: "waitingApproval"; kind: string; prompt: string; continuationToken?: string }
   | { status: "running" };
 
 export type RunnerGateway = {
@@ -23,15 +24,19 @@ export type RunnerGateway = {
     operationId: string;
     approvalId: string;
     decision: "approve" | "deny";
+    continuationToken?: string;
   }): Promise<TurnExecutionResult>;
   interruptTurn(input: { operationId: string }): Promise<void>;
 };
 
 let gatewaySingleton: RunnerGateway | null = null;
 
-export function createRunnerGateway(backend = getExecutionBackend()): RunnerGateway {
+export function createRunnerGateway(
+  backend = getExecutionBackend(),
+  input?: { appServerClient?: AppServerClient },
+): RunnerGateway {
   if (backend === "codex") {
-    return new CodexAppServerGateway();
+    return new CodexAppServerGateway({ appServerClient: input?.appServerClient });
   }
 
   return new MockRunnerGateway();

@@ -4,6 +4,8 @@
 
 - `src/server/runtime/execution-config.ts`: runtime backend switch (`mock | codex`).
 - `src/server/codex/runner-manager.ts`: in-process runner runtime manager keyed by `workspaceId`.
+- `src/server/codex/app-server/client.ts`: app-server protocol client interface + noop adapter.
+- `src/server/codex/app-server/process-manager.ts`: workspace-scoped app-server process metadata manager.
 - `src/server/codex/runner-gateway.ts`: backend gateway abstraction + factory.
 - `src/server/services/operation-execution-registry.ts`: in-memory operation execution references for resume/interrupt.
 - `src/server/services/session-service.ts`: session creation/read logic.
@@ -22,6 +24,7 @@ Current web polling behavior:
 - `/sessions`: client polls `GET /api/v1/sessions` periodically to refresh list state
 - `/sessions/:sessionId`: client polls `GET /api/v1/sessions/:sessionId` periodically to refresh detail state
 - pending approvals can be decided in-page via `POST /api/v1/approvals/:approvalId/decision`, then detail is refreshed
+- session detail page includes `Send Turn` composer, posting `turn.start` to `POST /api/v1/operations`
 - session detail page renders operation history timeline with client-side paging
 - operation logs are persisted in SQLite (`OperationLog`) and attached to operation detail/time-line rendering
 - session detail page can trigger logs API re-fetch with `level/from/to` filters for visible operations
@@ -56,11 +59,12 @@ Alternative terminal states: `failed`, `interrupted`.
 ## Execution Backend and Fallback
 
 - `EXECUTION_BACKEND=mock` (default): use mock gateway to keep API/UI polling behavior stable.
-- `EXECUTION_BACKEND=codex`: route operation execution through real `codex exec` invocation in `CodexAppServerGateway`.
+- `EXECUTION_BACKEND=codex`: route operation execution through `CodexAppServerGateway` (`app-server` first, `codex exec` fallback).
 - Any unset/unknown backend value falls back to `mock`.
 - codex backend supports per-operation timeout via `CODEX_EXEC_TIMEOUT_MS` (default `300000`).
 - `POST /api/v1/operations` returns `202` quickly after `startExecution`, then `OperationService.dispatchExecution` continues asynchronously.
-- Approval resume and interrupt reuse execution registry + gateway, so routing remains consistent across `mock` and `codex`.
+- Approval resume threads `continuationToken` from gateway result -> execution registry -> resume call.
+- Interrupt uses protocol-first path (`app-server interrupt`) and falls back to process signals (`SIGINT` -> `SIGKILL`).
 
 ## Approval Queue Behavior
 
@@ -72,6 +76,7 @@ When an operation requires approval:
 4. `POST /api/v1/approvals/:approvalId/decision` updates approval + operation state:
    - `approve` -> approval `approved`, operation `running`
    - `deny` -> approval `denied`, operation `failed`
+5. On `approve`, `OperationService.resumeAfterApproval` uses cached continuation token when available.
 
 ## Persistence Model
 

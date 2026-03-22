@@ -51,12 +51,13 @@ Fallback strategy:
 
 - If `EXECUTION_BACKEND` is unset or invalid, service falls back to `mock`.
 - Keep `mock` as rollback option when codex runtime/protocol is unstable.
-- Current codex backend executes real `codex exec` commands per operation, supports interrupt via process signal, and keeps approval resume in the same workspace context.
+- Current codex backend prefers app-server protocol for turn/approval/interrupt and falls back to real `codex exec` when protocol path is unavailable.
+- Approval continuation token is threaded through service -> gateway on resume to avoid prompt replay semantics.
 
 Optional integration validation (real codex backend):
 
 ```bash
-RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm test -- tests/codex/codex-app-server-gateway.integration.test.ts
+RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts
 ```
 
 ## Required `.env` (Sanitized Template)
@@ -86,6 +87,7 @@ From another machine in the same tailnet:
 `/sessions` renders real session records and auto-refreshes by polling.
 `/sessions/[sessionId]` shows live detail, pending approvals, and supports in-page `approve/deny` decisions.
 `/sessions/[sessionId]` also includes operation history timeline with paging.
+`/sessions/[sessionId]` supports in-page turn submission (`Send Turn`) which calls `POST /api/v1/operations`.
 operation history cards include log lines persisted in SQLite (`OperationLog`) and retained across restarts.
 `/api/v1/operations/:operationId/logs` supports `after/limit/level/from/to` query params for incremental log fetching.
 session detail now provides log filter controls (`level/from/to`) that call the logs API for visible history items.
@@ -93,6 +95,22 @@ after applying filter, `Load New Logs` uses cursor-based incremental fetch (`aft
 when filter is active, background polling also follows cursor-based incremental log loading.
 auto incremental polling now uses retry backoff with jitter on failures (exponential growth up to 30s, plus 0~25% jitter on retries, reset on success).
 session detail exposes a log polling status panel (filter active, retry count, next delay, per-operation cursor).
+
+## Manual Verification (Web Turn Flow)
+
+Mock backend (recommended for deterministic web flow):
+
+```bash
+NEXTAUTH_SECRET=dev-secret DATABASE_URL="file:./dev.db" EXECUTION_BACKEND=mock pnpm dev
+```
+
+Then:
+
+1. Create a session: `curl -s -X POST http://127.0.0.1:43173/api/v1/sessions -H 'content-type: application/json' -d '{"workspaceId":"ws-manual","cwd":"/tmp/ws-manual"}'`
+2. Open `/sessions/<sessionId>` from response payload.
+3. In `Send Turn`, input text and click `Send`.
+4. Confirm new operation appears in history and status progresses (`running -> completed` in mock).
+5. If operation requests approval, verify `Approve/Deny` still works.
 
 ## Start OAuth Sign-In
 

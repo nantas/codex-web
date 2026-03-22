@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import {
+  NoopAppServerClient,
+  type AppServerClient,
+  type AppServerTurnInput,
+} from "@/server/codex/app-server/client";
+import type { AppServerTurnEvent } from "@/server/codex/app-server/protocol";
 import { RunnerManager } from "@/server/codex/runner-manager";
 import type { RunnerGateway, TurnExecutionResult } from "@/server/codex/runner-gateway";
 
@@ -22,12 +28,24 @@ type OperationContext = {
   text: string;
 };
 
+type ActiveAppServerTurn = {
+  workspaceId: string;
+  turnId: string;
+};
+
 export class CodexAppServerGateway implements RunnerGateway {
   backend = "codex" as const;
 
-  private readonly manager = new RunnerManager();
+  private readonly manager: RunnerManager;
+  private readonly appServerClient: AppServerClient;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
+  private readonly activeAppServerTurns = new Map<string, ActiveAppServerTurn>();
   private readonly operationContexts = new Map<string, OperationContext>();
+
+  constructor(input?: { manager?: RunnerManager; appServerClient?: AppServerClient }) {
+    this.manager = input?.manager ?? new RunnerManager();
+    this.appServerClient = input?.appServerClient ?? new NoopAppServerClient();
+  }
 
   async ensureRunner(input: { workspaceId: string; cwd: string }) {
     const runtime = await this.manager.getOrCreate(input.workspaceId, { cwd: input.cwd });
@@ -38,7 +56,10 @@ export class CodexAppServerGateway implements RunnerGateway {
 
     try {
       await this.ensureCodexBinaryReachable(input.cwd);
-      this.manager.markReady(input.workspaceId, { endpoint: "codex://exec", pid: null });
+      const endpoint = (await this.appServerClient.isAvailable())
+        ? "codex://app-server"
+        : "codex://exec";
+      this.manager.markReady(input.workspaceId, { endpoint, pid: null });
     } catch (error) {
       this.manager.markFailed(input.workspaceId);
       throw new Error(`failed to initialize codex backend: ${toErrorMessage(error)}`);
@@ -61,6 +82,12 @@ export class CodexAppServerGateway implements RunnerGateway {
       text: input.text,
     });
 
+    const appServerResult = await this.tryStartTurnViaAppServer(input);
+    if (appServerResult) {
+      this.manager.touch(input.workspaceId);
+      return appServerResult;
+    }
+
     return this.runCodexExec({
       operationId: input.operationId,
       workspaceId: input.workspaceId,
@@ -73,6 +100,7 @@ export class CodexAppServerGateway implements RunnerGateway {
     operationId: string;
     approvalId: string;
     decision: "approve" | "deny";
+    continuationToken?: string;
   }): Promise<TurnExecutionResult> {
     if (input.decision === "deny") {
       return { status: "failed", errorMessage: "approval denied" };
@@ -84,6 +112,24 @@ export class CodexAppServerGateway implements RunnerGateway {
         status: "failed",
         errorMessage: `missing execution context for operation ${input.operationId}`,
       };
+    }
+
+    const resumedViaAppServer = await this.tryResumeViaAppServer(input);
+    if (resumedViaAppServer) {
+      this.manager.touch(context.workspaceId);
+      return resumedViaAppServer;
+    }
+
+    if (input.continuationToken) {
+      return this.runCodexExec({
+        operationId: input.operationId,
+        workspaceId: context.workspaceId,
+        cwd: context.cwd,
+        prompt: [
+          `Resume operation ${input.operationId} after approval ${input.approvalId}.`,
+          `Continuation token: ${input.continuationToken}`,
+        ].join("\n"),
+      });
     }
 
     return this.runCodexExec({
@@ -98,6 +144,22 @@ export class CodexAppServerGateway implements RunnerGateway {
   }
 
   async interruptTurn(input: { operationId: string }) {
+    const protocolTurn = this.activeAppServerTurns.get(input.operationId);
+    if (protocolTurn) {
+      try {
+        await this.appServerClient.interruptTurn({
+          operationId: input.operationId,
+          workspaceId: protocolTurn.workspaceId,
+          turnId: protocolTurn.turnId,
+        });
+        this.activeAppServerTurns.delete(input.operationId);
+        this.manager.touch(protocolTurn.workspaceId);
+        return;
+      } catch {
+        // fallback to process-signal interruption
+      }
+    }
+
     const active = this.activeExecutions.get(input.operationId);
     if (!active) {
       return;
@@ -126,6 +188,42 @@ export class CodexAppServerGateway implements RunnerGateway {
 
     if (check.code !== 0) {
       throw new Error(check.errorMessage ?? "codex --version failed");
+    }
+  }
+
+  private async tryResumeViaAppServer(input: {
+    operationId: string;
+    approvalId: string;
+    decision: "approve" | "deny";
+    continuationToken?: string;
+  }): Promise<TurnExecutionResult | null> {
+    if (!input.continuationToken) {
+      return null;
+    }
+
+    if (!(await this.appServerClient.isAvailable())) {
+      return null;
+    }
+
+    try {
+      const event = await this.appServerClient.resumeAfterApproval({
+        operationId: input.operationId,
+        approvalId: input.approvalId,
+        decision: input.decision,
+        continuationToken: input.continuationToken,
+      });
+      const context = this.operationContexts.get(input.operationId);
+      if (event.type === "turn.completed") {
+        this.activeAppServerTurns.delete(input.operationId);
+      } else if (context) {
+        this.activeAppServerTurns.set(input.operationId, {
+          workspaceId: context.workspaceId,
+          turnId: event.id,
+        });
+      }
+      return mapAppServerEventToResult(event);
+    } catch {
+      return null;
     }
   }
 
@@ -179,6 +277,27 @@ export class CodexAppServerGateway implements RunnerGateway {
       return { status: "failed", errorMessage: toErrorMessage(error) };
     } finally {
       await rm(outputFile, { force: true }).catch(() => undefined);
+    }
+  }
+
+  private async tryStartTurnViaAppServer(input: AppServerTurnInput): Promise<TurnExecutionResult | null> {
+    if (!(await this.appServerClient.isAvailable())) {
+      return null;
+    }
+
+    try {
+      const event = await this.appServerClient.startTurn(input);
+      if (event.type === "turn.completed") {
+        this.activeAppServerTurns.delete(input.operationId);
+      } else {
+        this.activeAppServerTurns.set(input.operationId, {
+          workspaceId: input.workspaceId,
+          turnId: event.id,
+        });
+      }
+      return mapAppServerEventToResult(event);
+    } catch {
+      return null;
     }
   }
 
@@ -277,6 +396,26 @@ export class CodexAppServerGateway implements RunnerGateway {
       });
     });
   }
+}
+
+function mapAppServerEventToResult(event: AppServerTurnEvent): TurnExecutionResult {
+  if (event.type === "turn.completed") {
+    return {
+      status: "completed",
+      resultText: event.outputText,
+    };
+  }
+
+  if (event.type === "turn.approval_required") {
+    return {
+      status: "waitingApproval",
+      kind: event.kind,
+      prompt: event.prompt,
+      continuationToken: event.continuationToken,
+    };
+  }
+
+  return { status: "running" };
 }
 
 function getExecTimeoutMs() {
