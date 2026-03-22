@@ -77,4 +77,49 @@ describe("CodexAppServerGateway", () => {
     expect(runtime?.pid).toBe(999);
     expect(runtime?.processHandleId).toBe("proc-9");
   });
+
+  it("sends deny decision to app-server when continuation token exists", async () => {
+    let decisionSeen: string | null = null;
+    const gateway = new CodexAppServerGateway({
+      appServerClient: {
+        isAvailable: async () => true,
+        ensureProcess: async () => ({ id: "proc-10", endpoint: "stdio://test", pid: 1000 }),
+        startTurn: async () => ({
+          id: "evt-10",
+          type: "turn.approval_required",
+          kind: "commandExecution",
+          prompt: "needs approval",
+          continuationToken: "token-10",
+        }),
+        resumeAfterApproval: async (input) => {
+          decisionSeen = input.decision;
+          return {
+            id: "evt-11",
+            type: "turn.running",
+          };
+        },
+        interruptTurn: async () => {},
+      },
+    });
+
+    await gateway.startTurn({
+      operationId: "op-10",
+      workspaceId: "ws-10",
+      cwd: process.cwd(),
+      sessionId: "ses-10",
+      threadId: "thr-10",
+      text: "dangerous",
+    });
+    const result = await gateway.resumeAfterApproval({
+      operationId: "op-10",
+      approvalId: "apr-10",
+      decision: "deny",
+      continuationToken: "token-10",
+    });
+
+    expect(decisionSeen).toBe("deny");
+    expect(result).toMatchObject({
+      status: "running",
+    });
+  });
 });

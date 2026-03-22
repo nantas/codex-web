@@ -1,43 +1,43 @@
 # 当前交接入口（Canonical Handoff Entry）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十六批）
+更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十七批）
 
 ## 当前状态
 
-- 阶段：MVP 已完成，原生 app-server 审批恢复（server-request response）已接线并验证。
+- 阶段：MVP 已完成，原生 app-server 审批恢复（server-request response）已接线；`deny` 协议级清理已补齐。
 - 当前任务主入口：`docs/plans/README.md`
 - 当前主计划：`docs/plans/2026-03-22-codex-execution-unclosed-items-implementation-plan.md`
 
 ## 本次交接摘要
 
-- `CodexCliAppServerClient` 已补齐 modern 审批识别：
-  - 首选 `item/commandExecution/requestApproval` 通知映射为 `turn.approval_required`；
-  - 兜底识别 `thread.status.activeFlags=waitingOnApproval`，避免 operation 持续停留 `running`。
-- 同步修复 `thread/read` 瞬态错误（`not materialized yet`）处理：改为短暂重试，不再直接写入 `failed`。
-- 修复 `approve` 后上下文丢失：`OperationService.resumeAfterApproval` 显式向 gateway 透传执行上下文，gateway 支持从输入重建 context，避免 `missing execution context`。
-- 原生 resume 细化：`CodexCliAppServerClient` 在 modern token 可用时，不再优先 `turn.resume`，而是按 `requestApproval` 的 request id 回写 `result`（`accept`）并等待同一 turn 收敛。
-- 新增测试 `tests/codex/codex-cli-app-server-client.test.ts`，覆盖通知触发、activeFlags 触发、transient `thread/read` 重试三条路径。
-- 已完成网页端真实审批闭环验证（`localhost:43173`）：
-  - approve：审批接口 200，operation 终态 `completed`
-  - deny：审批接口 200，operation 终态 `failed`
+- 审批决策路由已补齐 `deny` 协议清理：
+  - `POST /api/v1/approvals/:approvalId/decision` 在 `deny` 时也调用 `resumeAfterApproval(decision=deny)`；
+  - 该调用为 best-effort，失败时仅追加错误日志，不影响 API 返回 200 与拒绝结果落库。
+- `CodexAppServerGateway.resumeAfterApproval` 语义更新：
+  - 不再在入口处直接短路 `deny`；
+  - 若存在 continuation token，`deny` 同样优先走 app-server 协议恢复（发送 cancel/deny），以释放等待中的 turn。
+- 新增测试覆盖：
+  - `tests/api/approval-decision.route.test.ts`：deny 触发清理、清理失败仍成功返回。
+  - `tests/codex/codex-app-server-gateway.unit.test.ts`：deny 决策透传到 app-server client。
+- 真实后端复验现状：
+  - `localhost:43173` 可稳定复现 `waitingApproval`；
+  - 仍观察到一条默认策略下超时样本：`[APP_SERVER_TIMEOUT] waiting for modern app-server turn completion timed out`，后续需继续人工联调收敛。
 
 ## 验证摘要
 
 - `pnpm lint`：通过
 - `pnpm typecheck`：通过
-- `pnpm test -- tests/codex/codex-cli-app-server-client.test.ts tests/services/operation-execution.service.test.ts tests/codex/codex-app-server-gateway.integration.test.ts`：通过（31 files, 75 passed）
-- `pnpm test -- tests/codex/codex-cli-app-server-client.test.ts tests/codex/codex-app-server-gateway.integration.test.ts`：通过（31 files, 73 passed）
-- `pnpm test -- tests/services/operation-execution.service.test.ts tests/codex/codex-cli-app-server-client.test.ts tests/codex/codex-app-server-gateway.integration.test.ts`：通过（31 files, 74 passed）
+- `pnpm exec vitest run tests/api/approval-decision.route.test.ts tests/codex/codex-app-server-gateway.unit.test.ts --maxWorkers=1`：通过（2 files, 7 passed）
+- `DATABASE_URL='file:/Users/nantas-agent/projects/codex-web/prisma/dev.db' pnpm test -- --maxWorkers=1`：通过（31 files, 77 passed）
 - `pnpm test:e2e`：通过（1 passed）
-- 真实 codex 后端验证：通过（连续 3 轮 `turn.start -> waitingApproval`）
-- 网页端审批验证：通过（approve 完成、deny 失败）
+- 真实 codex 后端复验：可达 `waitingApproval`，但存在 1 条超时失败样本（默认策略场景）
 
 ## 下一位 Agent 接手
 
 1. 从 `AGENTS.md` 读取规则与交付清单。
 2. 从 `docs/plans/README.md` 进入当前任务计划。
-3. 继续补齐协议未收口项：真实 app-server 原生 resume 语义与线程恢复一致性。
-4. 评估 deny 分支是否需要协议级 `cancel` 回包，以及是否在 `next.config` 增加 `allowedDevOrigins`（若继续使用 `127.0.0.1` 做本地验证）。
+3. 继续补齐协议未收口项：真实 app-server 默认策略下审批触发稳定性与线程恢复一致性。
+4. 继续收集超时样本（`APP_SERVER_TIMEOUT`）并细化可复现条件；必要时固化“强制审批策略”验证入口。
 5. 完成任务后同步更新：
    - `docs/progress/project-progress.md`
    - `docs/handoff/current-handoff.md`

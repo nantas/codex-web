@@ -119,10 +119,6 @@ export class CodexAppServerGateway implements RunnerGateway {
     threadId?: string;
     text?: string;
   }): Promise<TurnExecutionResult> {
-    if (input.decision === "deny") {
-      return { status: "failed", errorMessage: "approval denied" };
-    }
-
     const context =
       this.operationContexts.get(input.operationId) ??
       buildOperationContextFromResumeInput(input);
@@ -141,6 +137,10 @@ export class CodexAppServerGateway implements RunnerGateway {
     if (resumedViaAppServer) {
       this.manager.touch(context.workspaceId);
       return resumedViaAppServer;
+    }
+
+    if (input.decision === "deny") {
+      return { status: "failed", errorMessage: "approval denied" };
     }
 
     if (input.continuationToken) {

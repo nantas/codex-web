@@ -99,7 +99,7 @@
 1. 操作进入 `waitingApproval` 并生成 `Approval(pending)`。
 2. 用户提交审批决定。
 3. `approve` -> route 调用 `resumeAfterApproval`，优先使用 continuation token 继续执行并回写状态；
-4. `deny` -> operation 变 `failed`（并记录失败日志）。
+4. `deny` -> operation 变 `failed`（并记录失败日志），同时 best-effort 调用 `resumeAfterApproval(decision=deny)` 向 app-server 发送协议级拒绝响应，释放等待中的 turn。
 
 ### 4.4 会话查看流程
 

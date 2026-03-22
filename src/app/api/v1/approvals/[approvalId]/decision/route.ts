@@ -45,6 +45,19 @@ export async function POST(
         approvalId: approval.id,
         decision: "approve",
       });
+    } else {
+      try {
+        await operationService.resumeAfterApproval({
+          operationId: approval.operationId,
+          approvalId: approval.id,
+          decision: "deny",
+        });
+      } catch (resumeError) {
+        await operationLogService.append(approval.operationId, {
+          level: "error",
+          message: `approval ${approval.id} deny protocol cleanup failed: ${toErrorMessage(resumeError)}`,
+        });
+      }
     }
 
     return NextResponse.json({ approvalId: approval.id, status: approval.status });
@@ -60,4 +73,12 @@ export async function POST(
 
     return toErrorResponse(error);
   }
+}
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "unknown error";
 }

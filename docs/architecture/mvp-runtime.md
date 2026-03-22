@@ -85,7 +85,9 @@ When an operation requires approval:
 4. `POST /api/v1/approvals/:approvalId/decision` updates approval + operation state:
    - `approve` -> approval `approved`, operation `running`
    - `deny` -> approval `denied`, operation `failed`
-5. On `approve`, `OperationService.resumeAfterApproval` uses cached continuation token when available.
+5. `OperationService.resumeAfterApproval` is invoked for both decisions:
+   - `approve`: resumes execution with continuation token when available.
+   - `deny`: best-effort sends protocol-level cancel/deny response for app-server cleanup; local operation stays `failed` even if cleanup call fails.
 
 ## Persistence Model
 
