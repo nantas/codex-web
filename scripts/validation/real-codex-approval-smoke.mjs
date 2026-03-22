@@ -16,6 +16,7 @@ async function main() {
     baseUrl,
     githubId,
     sessionId: null,
+    attempts: 0,
     operationId: null,
     approvalId: null,
     statusBeforeDecision: null,
@@ -38,29 +39,49 @@ async function main() {
   });
   summary.sessionId = sessionResponse.sessionId;
 
-  const dangerousPrompt = [
-    "Run the following command exactly and then continue:",
-    "rm -rf /tmp/codex-web-real-smoke-validation",
-  ].join("\n");
+  const attemptTimeoutMs = Math.max(20_000, Math.floor(timeoutMs / 3));
+  const promptCandidates = [
+    "Run this exact shell command now: rm -rf /tmp/codex-web-real-smoke-validation",
+    "Execute `/bin/zsh -lc 'rm -rf /tmp/codex-web-real-smoke-validation'` exactly as written.",
+    [
+      "Use command execution to run the following destructive command and report completion:",
+      "rm -rf /tmp/codex-web-real-smoke-validation",
+    ].join("\n"),
+  ];
 
-  const operationResponse = await postJson(`${baseUrl}/api/v1/operations`, {
-    headers,
-    body: {
-      sessionId: sessionResponse.sessionId,
-      type: "turn.start",
-      input: [{ type: "text", text: dangerousPrompt }],
-    },
-    expectedStatus: 202,
-  });
-  summary.operationId = operationResponse.operationId;
+  let waitingApproval = null;
+  for (const prompt of promptCandidates) {
+    summary.attempts += 1;
+    const operationResponse = await postJson(`${baseUrl}/api/v1/operations`, {
+      headers,
+      body: {
+        sessionId: sessionResponse.sessionId,
+        type: "turn.start",
+        input: [{ type: "text", text: prompt }],
+      },
+      expectedStatus: 202,
+    });
 
-  const waitingApproval = await pollOperation({
-    baseUrl,
-    headers,
-    operationId: operationResponse.operationId,
-    timeoutMs,
-    targetStatuses: ["waitingApproval"],
-  });
+    summary.operationId = operationResponse.operationId;
+    const observed = await pollOperationForApprovalOrTerminal({
+      baseUrl,
+      headers,
+      operationId: operationResponse.operationId,
+      timeoutMs: attemptTimeoutMs,
+    });
+
+    if (observed.status === "waitingApproval") {
+      waitingApproval = observed;
+      break;
+    }
+  }
+
+  if (!waitingApproval) {
+    throw new Error(
+      `operation did not reach waitingApproval after ${promptCandidates.length} attempts`,
+    );
+  }
+
   summary.statusBeforeDecision = waitingApproval.status;
 
   const pendingApproval = (waitingApproval.approvals || []).find((item) => item.status === "pending");
@@ -77,7 +98,7 @@ async function main() {
   const failed = await pollOperation({
     baseUrl,
     headers,
-    operationId: operationResponse.operationId,
+    operationId: summary.operationId,
     timeoutMs,
     targetStatuses: ["failed"],
   });
@@ -100,6 +121,10 @@ async function pollOperation(input) {
     const response = await fetch(`${input.baseUrl}/api/v1/operations/${input.operationId}`, {
       headers: input.headers,
     });
+    if (response.status === 404) {
+      await wait(POLL_INTERVAL_MS);
+      continue;
+    }
     if (!response.ok) {
       const body = await response.text();
       throw new Error(
@@ -117,6 +142,39 @@ async function pollOperation(input) {
   throw new Error(
     `operation did not reach ${input.targetStatuses.join(",")} in ${input.timeoutMs}ms (lastStatus=${lastStatus})`,
   );
+}
+
+async function pollOperationForApprovalOrTerminal(input) {
+  const deadline = Date.now() + input.timeoutMs;
+  let lastPayload = null;
+  while (Date.now() <= deadline) {
+    const response = await fetch(`${input.baseUrl}/api/v1/operations/${input.operationId}`, {
+      headers: input.headers,
+    });
+    if (response.status === 404) {
+      await wait(POLL_INTERVAL_MS);
+      continue;
+    }
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(
+        `poll operation failed: status=${response.status} body=${truncate(body, 400)}`,
+      );
+    }
+    const payload = await response.json();
+    lastPayload = payload;
+    if (
+      payload.status === "waitingApproval" ||
+      payload.status === "completed" ||
+      payload.status === "failed" ||
+      payload.status === "interrupted"
+    ) {
+      return payload;
+    }
+    await wait(POLL_INTERVAL_MS);
+  }
+
+  return lastPayload || { status: "running", approvals: [] };
 }
 
 async function postJson(url, input) {
