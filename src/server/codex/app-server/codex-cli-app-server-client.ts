@@ -321,17 +321,9 @@ export class CodexCliAppServerClient implements AppServerClient {
     }).catch(() => null);
 
     while (Date.now() <= deadline) {
-      let response: unknown;
+      let snapshot: { turn: ModernTurn | null; waitingOnApproval: boolean } | null = null;
       try {
-        response = await this.processManager.sendRequest({
-          workspaceId: input.workspaceId,
-          cwd: input.cwd,
-          method: "thread/read",
-          params: {
-            threadId: input.threadId,
-            includeTurns: true,
-          },
-        });
+        snapshot = await this.readModernTurnSnapshot(input);
       } catch (error) {
         if (isTransientThreadReadState(error)) {
           await waitForApprovalOrInterval(approvalNotificationPromise, deadline);
@@ -340,8 +332,7 @@ export class CodexCliAppServerClient implements AppServerClient {
         throw error;
       }
 
-      const snapshot = findTurnSnapshotById(response, input.turnId);
-      if (!snapshot.turn) {
+      if (!snapshot?.turn) {
         await waitForApprovalOrInterval(approvalNotificationPromise, deadline);
         continue;
       }
@@ -382,6 +373,22 @@ export class CodexCliAppServerClient implements AppServerClient {
       }
     }
 
+    const finalSnapshot = await this.readModernTurnSnapshot(input).catch(() => null);
+    if (finalSnapshot?.turn) {
+      if (finalSnapshot.waitingOnApproval && isRunningStatus(finalSnapshot.turn.status)) {
+        return {
+          ...finalSnapshot.turn,
+          status: "approval_required",
+          approvalKind: "commandExecution",
+          approvalPrompt: "Codex app-server requires approval to continue.",
+        };
+      }
+
+      if (!isRunningStatus(finalSnapshot.turn.status)) {
+        return finalSnapshot.turn;
+      }
+    }
+
     throw new AppServerClientError("timeout", "waiting for modern app-server turn completion timed out");
   }
 
@@ -405,7 +412,16 @@ export class CodexCliAppServerClient implements AppServerClient {
           return false;
         }
 
-        return message.params.threadId === input.threadId && message.params.turnId === input.turnId;
+        if (message.params.threadId !== input.threadId) {
+          return false;
+        }
+
+        const paramsTurnId = message.params.turnId;
+        if (paramsTurnId === undefined) {
+          return true;
+        }
+
+        return paramsTurnId === input.turnId;
       },
     });
 
@@ -433,6 +449,25 @@ export class CodexCliAppServerClient implements AppServerClient {
       approvePayload,
       denyPayload,
     };
+  }
+
+  private async readModernTurnSnapshot(input: {
+    workspaceId: string;
+    cwd: string;
+    threadId: string;
+    turnId: string;
+  }) {
+    const response = await this.processManager.sendRequest({
+      workspaceId: input.workspaceId,
+      cwd: input.cwd,
+      method: "thread/read",
+      params: {
+        threadId: input.threadId,
+        includeTurns: true,
+      },
+    });
+
+    return findTurnSnapshotById(response, input.turnId);
   }
 }
 

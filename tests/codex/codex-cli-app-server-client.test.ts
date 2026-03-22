@@ -82,6 +82,76 @@ describe("CodexCliAppServerClient modern approval detection", () => {
     }
   });
 
+  it("accepts approval notification when turnId is omitted but threadId matches", async () => {
+    const manager = new AppServerProcessManager();
+
+    vi.spyOn(manager, "getOrStart").mockResolvedValue({
+      id: "pm_1b",
+      endpoint: "stdio://fake",
+      pid: 1011,
+    });
+
+    vi.spyOn(manager, "sendRequest").mockImplementation(async ({ method }) => {
+      if (method === "initialize") {
+        return {};
+      }
+      if (method === "thread/start") {
+        return { thread: { id: "thread-modern-1b" } };
+      }
+      if (method === "turn/start") {
+        return {
+          turn: {
+            id: "turn-modern-1b",
+            status: "inProgress",
+            items: [],
+            error: null,
+          },
+        };
+      }
+      if (method === "thread/read") {
+        return {
+          thread: {
+            status: { type: "active", activeFlags: [] },
+            turns: [
+              {
+                id: "turn-modern-1b",
+                status: "inProgress",
+                items: [],
+                error: null,
+              },
+            ],
+          },
+        };
+      }
+
+      throw new Error(`unexpected method: ${method}`);
+    });
+
+    vi.spyOn(manager, "waitForNotification").mockResolvedValue({
+      method: "item/commandExecution/requestApproval",
+      params: {
+        threadId: "thread-modern-1b",
+        command: "/bin/zsh -lc 'echo safe-check'",
+      },
+    });
+
+    const client = new CodexCliAppServerClient(manager);
+    const event = await client.startTurn({
+      operationId: "op-modern-approval-1b",
+      workspaceId: "ws-modern-approval-1b",
+      cwd: process.cwd(),
+      sessionId: "ses-modern-approval-1b",
+      threadId: "thr-modern-approval-1b",
+      text: "needs approval without turnId in notification",
+    });
+
+    expect(event).toMatchObject({
+      id: "turn-modern-1b",
+      type: "turn.approval_required",
+      kind: "commandExecution",
+    });
+  });
+
   it("maps thread waitingOnApproval flag to turn.approval_required even without notification", async () => {
     const manager = new AppServerProcessManager();
 
@@ -295,6 +365,88 @@ describe("CodexCliAppServerClient modern approval detection", () => {
       id: "turn-modern-4",
       type: "turn.completed",
       outputText: "resumed-ok",
+    });
+  });
+
+  it("uses final thread snapshot after deadline to avoid false timeout", async () => {
+    const manager = new AppServerProcessManager();
+    let now = 0;
+    let readCount = 0;
+
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.spyOn(manager, "getOrStart").mockResolvedValue({
+      id: "pm_5",
+      endpoint: "stdio://fake",
+      pid: 1005,
+    });
+
+    vi.spyOn(manager, "sendRequest").mockImplementation(async ({ method }) => {
+      if (method === "initialize") {
+        return {};
+      }
+      if (method === "thread/start") {
+        return { thread: { id: "thread-modern-5" } };
+      }
+      if (method === "turn/start") {
+        return {
+          turn: {
+            id: "turn-modern-5",
+            status: "inProgress",
+            items: [],
+            error: null,
+          },
+        };
+      }
+      if (method === "thread/read") {
+        readCount += 1;
+        if (readCount === 1) {
+          now = 999_999;
+          return {
+            thread: {
+              status: { type: "active", activeFlags: [] },
+              turns: [{ id: "turn-modern-5", status: "inProgress", items: [], error: null }],
+            },
+          };
+        }
+        return {
+          thread: {
+            status: { type: "active", activeFlags: [] },
+            turns: [
+              {
+                id: "turn-modern-5",
+                status: "completed",
+                items: [{ type: "agentMessage", text: "final-snapshot-ok" }],
+                error: null,
+              },
+            ],
+          },
+        };
+      }
+
+      throw new Error(`unexpected method: ${method}`);
+    });
+
+    vi.spyOn(manager, "waitForNotification").mockImplementation(
+      async () =>
+        new Promise(() => {
+          // keep pending; rely on final snapshot path after deadline
+        }),
+    );
+
+    const client = new CodexCliAppServerClient(manager);
+    const event = await client.startTurn({
+      operationId: "op-modern-approval-5",
+      workspaceId: "ws-modern-approval-5",
+      cwd: process.cwd(),
+      sessionId: "ses-modern-approval-5",
+      threadId: "thr-modern-approval-5",
+      text: "final snapshot timeout guard",
+    });
+
+    expect(event).toMatchObject({
+      id: "turn-modern-5",
+      type: "turn.completed",
+      outputText: "final-snapshot-ok",
     });
   });
 });
