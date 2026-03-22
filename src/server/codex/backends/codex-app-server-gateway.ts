@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import {
+  NoopAppServerClient,
+  type AppServerClient,
+  type AppServerTurnInput,
+} from "@/server/codex/app-server/client";
+import type { AppServerTurnEvent } from "@/server/codex/app-server/protocol";
 import { RunnerManager } from "@/server/codex/runner-manager";
 import type { RunnerGateway, TurnExecutionResult } from "@/server/codex/runner-gateway";
 
@@ -25,9 +31,15 @@ type OperationContext = {
 export class CodexAppServerGateway implements RunnerGateway {
   backend = "codex" as const;
 
-  private readonly manager = new RunnerManager();
+  private readonly manager: RunnerManager;
+  private readonly appServerClient: AppServerClient;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
   private readonly operationContexts = new Map<string, OperationContext>();
+
+  constructor(input?: { manager?: RunnerManager; appServerClient?: AppServerClient }) {
+    this.manager = input?.manager ?? new RunnerManager();
+    this.appServerClient = input?.appServerClient ?? new NoopAppServerClient();
+  }
 
   async ensureRunner(input: { workspaceId: string; cwd: string }) {
     const runtime = await this.manager.getOrCreate(input.workspaceId, { cwd: input.cwd });
@@ -38,7 +50,10 @@ export class CodexAppServerGateway implements RunnerGateway {
 
     try {
       await this.ensureCodexBinaryReachable(input.cwd);
-      this.manager.markReady(input.workspaceId, { endpoint: "codex://exec", pid: null });
+      const endpoint = (await this.appServerClient.isAvailable())
+        ? "codex://app-server"
+        : "codex://exec";
+      this.manager.markReady(input.workspaceId, { endpoint, pid: null });
     } catch (error) {
       this.manager.markFailed(input.workspaceId);
       throw new Error(`failed to initialize codex backend: ${toErrorMessage(error)}`);
@@ -60,6 +75,12 @@ export class CodexAppServerGateway implements RunnerGateway {
       threadId: input.threadId,
       text: input.text,
     });
+
+    const appServerResult = await this.tryStartTurnViaAppServer(input);
+    if (appServerResult) {
+      this.manager.touch(input.workspaceId);
+      return appServerResult;
+    }
 
     return this.runCodexExec({
       operationId: input.operationId,
@@ -182,6 +203,19 @@ export class CodexAppServerGateway implements RunnerGateway {
     }
   }
 
+  private async tryStartTurnViaAppServer(input: AppServerTurnInput): Promise<TurnExecutionResult | null> {
+    if (!(await this.appServerClient.isAvailable())) {
+      return null;
+    }
+
+    try {
+      const event = await this.appServerClient.startTurn(input);
+      return mapAppServerEventToResult(event);
+    } catch {
+      return null;
+    }
+  }
+
   private async runProcess(input: {
     operationId: string;
     workspaceId: string;
@@ -277,6 +311,25 @@ export class CodexAppServerGateway implements RunnerGateway {
       });
     });
   }
+}
+
+function mapAppServerEventToResult(event: AppServerTurnEvent): TurnExecutionResult {
+  if (event.type === "turn.completed") {
+    return {
+      status: "completed",
+      resultText: event.outputText,
+    };
+  }
+
+  if (event.type === "turn.approval_required") {
+    return {
+      status: "waitingApproval",
+      kind: event.kind,
+      prompt: event.prompt,
+    };
+  }
+
+  return { status: "running" };
 }
 
 function getExecTimeoutMs() {

@@ -1,3 +1,4 @@
+import type { AppServerClient } from "@/server/codex/app-server/client";
 import { CodexAppServerGateway } from "@/server/codex/backends/codex-app-server-gateway";
 import { MockRunnerGateway } from "@/server/codex/backends/mock-runner-gateway";
 import { getExecutionBackend, type ExecutionBackend } from "@/server/runtime/execution-config";
@@ -29,9 +30,12 @@ export type RunnerGateway = {
 
 let gatewaySingleton: RunnerGateway | null = null;
 
-export function createRunnerGateway(backend = getExecutionBackend()): RunnerGateway {
+export function createRunnerGateway(
+  backend = getExecutionBackend(),
+  input?: { appServerClient?: AppServerClient },
+): RunnerGateway {
   if (backend === "codex") {
-    return new CodexAppServerGateway();
+    return new CodexAppServerGateway({ appServerClient: input?.appServerClient });
   }
 
   return new MockRunnerGateway();
