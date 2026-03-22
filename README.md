@@ -51,13 +51,15 @@ Fallback strategy:
 
 - If `EXECUTION_BACKEND` is unset or invalid, service falls back to `mock`.
 - Keep `mock` as rollback option when codex runtime/protocol is unstable.
-- Current codex backend prefers app-server protocol for turn/approval/interrupt and falls back to real `codex exec` when protocol path is unavailable.
+- Current codex backend uses workspace-resident app-server process first for turn/approval/interrupt.
+- Gateway falls back to real `codex exec` only when app-server is unavailable; protocol/execution/timeout failures return classified errors instead of silent fallback.
 - Approval continuation token is threaded through service -> gateway on resume to avoid prompt replay semantics.
+- `CODEX_BIN` can override codex executable path (used by deterministic integration tests and local debugging).
 
-Optional integration validation (real codex backend):
+Optional deterministic codex integration validation (default uses fake codex fixture):
 
 ```bash
-RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts
+pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts
 ```
 
 ## Required `.env` (Sanitized Template)

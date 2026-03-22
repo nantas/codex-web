@@ -15,6 +15,8 @@ export type AppServerTurnInput = {
 
 export type AppServerResumeInput = {
   operationId: string;
+  workspaceId: string;
+  cwd: string;
   approvalId: string;
   decision: "approve" | "deny";
   continuationToken: string;
@@ -23,11 +25,35 @@ export type AppServerResumeInput = {
 export type AppServerInterruptInput = {
   operationId: string;
   workspaceId: string;
+  cwd: string;
   turnId: string;
 };
 
+export type AppServerProcessMeta = {
+  id: string;
+  endpoint: string;
+  pid: number | null;
+};
+
+export type AppServerClientErrorCode = "unavailable" | "protocol" | "execution" | "timeout";
+
+export class AppServerClientError extends Error {
+  constructor(
+    public readonly code: AppServerClientErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AppServerClientError";
+  }
+}
+
+export function isAppServerClientError(error: unknown): error is AppServerClientError {
+  return error instanceof AppServerClientError;
+}
+
 export type AppServerClient = {
   isAvailable(): Promise<boolean>;
+  ensureProcess(input: { workspaceId: string; cwd: string }): Promise<AppServerProcessMeta | null>;
   startTurn(input: AppServerTurnInput): Promise<AppServerTurnEvent>;
   resumeAfterApproval(input: AppServerResumeInput): Promise<AppServerTurnEvent>;
   interruptTurn(input: AppServerInterruptInput): Promise<void>;
@@ -38,18 +64,23 @@ export class NoopAppServerClient implements AppServerClient {
     return false;
   }
 
+  async ensureProcess(input: { workspaceId: string; cwd: string }): Promise<AppServerProcessMeta | null> {
+    void input;
+    return null;
+  }
+
   async startTurn(input: AppServerTurnInput): Promise<AppServerTurnEvent> {
     void input;
-    throw new Error("app-server unavailable");
+    throw new AppServerClientError("unavailable", "app-server unavailable");
   }
 
   async resumeAfterApproval(input: AppServerResumeInput): Promise<AppServerTurnEvent> {
     void input;
-    throw new Error("app-server unavailable");
+    throw new AppServerClientError("unavailable", "app-server unavailable");
   }
 
   async interruptTurn(input: AppServerInterruptInput): Promise<void> {
     void input;
-    throw new Error("app-server unavailable");
+    throw new AppServerClientError("unavailable", "app-server unavailable");
   }
 }

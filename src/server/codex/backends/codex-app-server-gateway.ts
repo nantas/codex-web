@@ -4,11 +4,15 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  NoopAppServerClient,
+  AppServerClientError,
+  isAppServerClientError,
   type AppServerClient,
+  type AppServerProcessMeta,
   type AppServerTurnInput,
 } from "@/server/codex/app-server/client";
+import { CodexCliAppServerClient } from "@/server/codex/app-server/codex-cli-app-server-client";
 import type { AppServerTurnEvent } from "@/server/codex/app-server/protocol";
+import { getCodexCommand } from "@/server/codex/codex-cli";
 import { RunnerManager } from "@/server/codex/runner-manager";
 import type { RunnerGateway, TurnExecutionResult } from "@/server/codex/runner-gateway";
 
@@ -30,6 +34,7 @@ type OperationContext = {
 
 type ActiveAppServerTurn = {
   workspaceId: string;
+  cwd: string;
   turnId: string;
 };
 
@@ -44,7 +49,7 @@ export class CodexAppServerGateway implements RunnerGateway {
 
   constructor(input?: { manager?: RunnerManager; appServerClient?: AppServerClient }) {
     this.manager = input?.manager ?? new RunnerManager();
-    this.appServerClient = input?.appServerClient ?? new NoopAppServerClient();
+    this.appServerClient = input?.appServerClient ?? new CodexCliAppServerClient();
   }
 
   async ensureRunner(input: { workspaceId: string; cwd: string }) {
@@ -55,11 +60,18 @@ export class CodexAppServerGateway implements RunnerGateway {
     }
 
     try {
+      const appServerProcess = await this.tryEnsureAppServerProcess(input.workspaceId, input.cwd);
+      if (appServerProcess) {
+        this.manager.bindProcessMeta(input.workspaceId, {
+          processHandleId: appServerProcess.id,
+          endpoint: appServerProcess.endpoint,
+          pid: appServerProcess.pid,
+        });
+        return;
+      }
+
       await this.ensureCodexBinaryReachable(input.cwd);
-      const endpoint = (await this.appServerClient.isAvailable())
-        ? "codex://app-server"
-        : "codex://exec";
-      this.manager.markReady(input.workspaceId, { endpoint, pid: null });
+      this.manager.markReady(input.workspaceId, { endpoint: "codex://exec", pid: null });
     } catch (error) {
       this.manager.markFailed(input.workspaceId);
       throw new Error(`failed to initialize codex backend: ${toErrorMessage(error)}`);
@@ -150,6 +162,7 @@ export class CodexAppServerGateway implements RunnerGateway {
         await this.appServerClient.interruptTurn({
           operationId: input.operationId,
           workspaceId: protocolTurn.workspaceId,
+          cwd: protocolTurn.cwd,
           turnId: protocolTurn.turnId,
         });
         this.activeAppServerTurns.delete(input.operationId);
@@ -181,7 +194,7 @@ export class CodexAppServerGateway implements RunnerGateway {
       operationId: `codex-probe-${randomUUID()}`,
       workspaceId: "probe",
       cwd,
-      command: "codex",
+      command: getCodexCommand(),
       args: ["--version"],
       timeoutMs: 10_000,
     });
@@ -205,25 +218,39 @@ export class CodexAppServerGateway implements RunnerGateway {
       return null;
     }
 
+    const context = this.operationContexts.get(input.operationId);
+    if (!context) {
+      return null;
+    }
+
     try {
       const event = await this.appServerClient.resumeAfterApproval({
         operationId: input.operationId,
+        workspaceId: context.workspaceId,
+        cwd: context.cwd,
         approvalId: input.approvalId,
         decision: input.decision,
         continuationToken: input.continuationToken,
       });
-      const context = this.operationContexts.get(input.operationId);
       if (event.type === "turn.completed") {
         this.activeAppServerTurns.delete(input.operationId);
       } else if (context) {
         this.activeAppServerTurns.set(input.operationId, {
           workspaceId: context.workspaceId,
+          cwd: context.cwd,
           turnId: event.id,
         });
       }
       return mapAppServerEventToResult(event);
-    } catch {
-      return null;
+    } catch (error) {
+      if (shouldFallbackToExec(error)) {
+        return null;
+      }
+
+      return {
+        status: "failed",
+        errorMessage: formatAppServerError(error),
+      };
     }
   }
 
@@ -239,7 +266,7 @@ export class CodexAppServerGateway implements RunnerGateway {
       operationId: input.operationId,
       workspaceId: input.workspaceId,
       cwd: input.cwd,
-      command: "codex",
+      command: getCodexCommand(),
       args: [
         "exec",
         "--skip-git-repo-check",
@@ -266,7 +293,7 @@ export class CodexAppServerGateway implements RunnerGateway {
       if (result.code !== 0) {
         return {
           status: "failed",
-          errorMessage: result.errorMessage ?? `codex exec failed with code ${String(result.code)}`,
+          errorMessage: classifyCodexExecFailure(result),
         };
       }
 
@@ -292,12 +319,35 @@ export class CodexAppServerGateway implements RunnerGateway {
       } else {
         this.activeAppServerTurns.set(input.operationId, {
           workspaceId: input.workspaceId,
+          cwd: input.cwd,
           turnId: event.id,
         });
       }
       return mapAppServerEventToResult(event);
-    } catch {
-      return null;
+    } catch (error) {
+      if (shouldFallbackToExec(error)) {
+        return null;
+      }
+
+      return {
+        status: "failed",
+        errorMessage: formatAppServerError(error),
+      };
+    }
+  }
+
+  private async tryEnsureAppServerProcess(
+    workspaceId: string,
+    cwd: string,
+  ): Promise<AppServerProcessMeta | null> {
+    try {
+      return await this.appServerClient.ensureProcess({ workspaceId, cwd });
+    } catch (error) {
+      if (shouldFallbackToExec(error)) {
+        return null;
+      }
+
+      throw error;
     }
   }
 
@@ -416,6 +466,54 @@ function mapAppServerEventToResult(event: AppServerTurnEvent): TurnExecutionResu
   }
 
   return { status: "running" };
+}
+
+function shouldFallbackToExec(error: unknown) {
+  return isAppServerClientError(error) && error.code === "unavailable";
+}
+
+function formatAppServerError(error: unknown) {
+  if (error instanceof AppServerClientError) {
+    return `[APP_SERVER_${error.code.toUpperCase()}] ${error.message}`;
+  }
+  return `[APP_SERVER_EXECUTION] ${toErrorMessage(error)}`;
+}
+
+function classifyCodexExecFailure(input: {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  interrupted: boolean;
+  timedOut: boolean;
+  errorMessage: string | null;
+}) {
+  if (input.timedOut) {
+    return "[CODEX_TIMEOUT] codex execution timed out";
+  }
+
+  if (input.interrupted) {
+    return "[CODEX_INTERRUPTED] codex execution interrupted";
+  }
+
+  const message = input.errorMessage ?? `codex exec failed with code ${String(input.code)}`;
+  const lower = message.toLowerCase();
+
+  if (lower.includes("spawn") && lower.includes("enoent")) {
+    return `[CODEX_BINARY_MISSING] ${message}`;
+  }
+
+  if (
+    lower.includes("please run codex login") ||
+    lower.includes("authentication failed") ||
+    lower.includes("not logged in")
+  ) {
+    return "[CODEX_AUTH] Authentication failed. Please run codex login.";
+  }
+
+  if (input.signal) {
+    return `[CODEX_SIGNAL_${input.signal}] ${message}`;
+  }
+
+  return `[CODEX_EXEC_FAILED] ${message}`;
 }
 
 function getExecTimeoutMs() {
