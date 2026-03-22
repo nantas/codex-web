@@ -30,6 +30,12 @@ type AppServerProcessHandle = AppServerProcessMeta & {
   >;
   stdoutBuffer: string;
   closed: boolean;
+  lastNotification:
+    | {
+        method: string;
+        at: string;
+      }
+    | null;
 };
 
 export class AppServerProcessManager {
@@ -58,6 +64,7 @@ export class AppServerProcessManager {
       notificationWaiters: new Map(),
       stdoutBuffer: "",
       closed: false,
+      lastNotification: null,
     };
 
     this.attachListeners(handle);
@@ -199,6 +206,18 @@ export class AppServerProcessManager {
     });
   }
 
+  getLastNotification(workspaceId: string): { method: string; at: string } | null {
+    const handle = this.byWorkspace.get(workspaceId);
+    if (!handle || handle.closed || !handle.lastNotification) {
+      return null;
+    }
+
+    return {
+      method: handle.lastNotification.method,
+      at: handle.lastNotification.at,
+    };
+  }
+
   private spawnProcess(cwd: string) {
     const command = getCodexCommand();
 
@@ -290,6 +309,14 @@ export class AppServerProcessManager {
   }
 
   private handleNotification(handle: AppServerProcessHandle, payload: Record<string, unknown>) {
+    const method = typeof payload.method === "string" ? payload.method : null;
+    if (method) {
+      handle.lastNotification = {
+        method,
+        at: new Date().toISOString(),
+      };
+    }
+
     for (const [id, waiter] of handle.notificationWaiters.entries()) {
       let matched = false;
       try {

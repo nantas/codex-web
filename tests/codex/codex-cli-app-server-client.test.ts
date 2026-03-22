@@ -527,4 +527,78 @@ describe("CodexCliAppServerClient modern approval detection", () => {
       outputText: "final-snapshot-ok",
     });
   });
+
+  it("includes thread/turn/request summary in timeout execution error", async () => {
+    const manager = new AppServerProcessManager();
+    let now = 0;
+    let readCount = 0;
+
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.spyOn(manager, "getOrStart").mockResolvedValue({
+      id: "pm_6",
+      endpoint: "stdio://fake",
+      pid: 1006,
+    });
+
+    vi.spyOn(manager, "sendRequest").mockImplementation(async ({ method }) => {
+      if (method === "initialize") {
+        return {};
+      }
+      if (method === "thread/start") {
+        return { thread: { id: "thread-modern-6" } };
+      }
+      if (method === "turn/start") {
+        return {
+          turn: {
+            id: "turn-modern-6",
+            status: "inProgress",
+            items: [],
+            error: null,
+          },
+        };
+      }
+      if (method === "thread/read") {
+        readCount += 1;
+        now = 999_999;
+        return {
+          thread: {
+            status: { type: "active", activeFlags: [] },
+            turns: [{ id: "turn-modern-6", status: "inProgress", items: [], error: null }],
+          },
+        };
+      }
+
+      throw new Error(`unexpected method: ${method}`);
+    });
+
+    vi.spyOn(manager, "waitForNotification").mockImplementation(
+      async () =>
+        new Promise(() => {
+          // keep pending; rely on timeout path
+        }),
+    );
+
+    const client = new CodexCliAppServerClient(manager);
+    const error = await client
+      .startTurn({
+        operationId: "op-modern-approval-6",
+        workspaceId: "ws-modern-approval-6",
+        cwd: process.cwd(),
+        sessionId: "ses-modern-approval-6",
+        threadId: "thr-modern-approval-6",
+        text: "timeout diag",
+      })
+      .then(() => null)
+      .catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(AppServerClientError);
+    expect(error).toMatchObject({
+      code: "timeout",
+      message: expect.stringContaining('"threadId":"thread-modern-6"'),
+    });
+    expect((error as AppServerClientError).message).toContain('"turnId":"turn-modern-6"');
+    expect((error as AppServerClientError).message).toContain('"lastNotificationMethod":null');
+    expect((error as AppServerClientError).message).toContain('"lastThreadReadAt":"');
+    expect(readCount).toBeGreaterThanOrEqual(2);
+  });
 });

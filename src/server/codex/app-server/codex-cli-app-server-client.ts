@@ -312,6 +312,7 @@ export class CodexCliAppServerClient implements AppServerClient {
     timeoutMs: number;
   }): Promise<ModernTurn> {
     const deadline = Date.now() + input.timeoutMs;
+    let lastThreadReadAt: string | null = null;
     const approvalNotificationPromise = this.waitForModernApprovalNotification({
       workspaceId: input.workspaceId,
       cwd: input.cwd,
@@ -324,6 +325,7 @@ export class CodexCliAppServerClient implements AppServerClient {
       let snapshot: { turn: ModernTurn | null; waitingOnApproval: boolean } | null = null;
       try {
         snapshot = await this.readModernTurnSnapshot(input);
+        lastThreadReadAt = new Date().toISOString();
       } catch (error) {
         if (isTransientThreadReadState(error)) {
           await waitForApprovalOrInterval(approvalNotificationPromise, deadline);
@@ -373,7 +375,12 @@ export class CodexCliAppServerClient implements AppServerClient {
       }
     }
 
-    const finalSnapshot = await this.readModernTurnSnapshot(input).catch(() => null);
+    const finalSnapshot = await this.readModernTurnSnapshot(input)
+      .then((snapshot) => {
+        lastThreadReadAt = new Date().toISOString();
+        return snapshot;
+      })
+      .catch(() => null);
     if (finalSnapshot?.turn) {
       if (finalSnapshot.waitingOnApproval && isRunningStatus(finalSnapshot.turn.status)) {
         return {
@@ -389,7 +396,19 @@ export class CodexCliAppServerClient implements AppServerClient {
       }
     }
 
-    throw new AppServerClientError("timeout", "waiting for modern app-server turn completion timed out");
+    const lastNotification = this.processManager.getLastNotification(input.workspaceId);
+    const diag = {
+      threadId: input.threadId,
+      turnId: input.turnId,
+      lastNotificationMethod: lastNotification?.method ?? null,
+      lastNotificationAt: lastNotification?.at ?? null,
+      lastThreadReadAt,
+    };
+
+    throw new AppServerClientError(
+      "timeout",
+      `waiting for modern app-server turn completion timed out | diag=${JSON.stringify(diag)}`,
+    );
   }
 
   private async waitForModernApprovalNotification(input: {
