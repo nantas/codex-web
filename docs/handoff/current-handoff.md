@@ -1,6 +1,6 @@
 # 当前交接入口（Canonical Handoff Entry）
 
-更新时间：2026-03-22（Codex CLI Phase 2 稳定性准备第一批）
+更新时间：2026-03-22（Codex CLI Phase 2 稳定性准备第二批已完成）
 
 ## 当前状态
 
@@ -9,6 +9,22 @@
 - 当前主计划：`docs/plans/2026-03-22-codex-execution-unclosed-items-implementation-plan.md`
 
 ## 本次交接摘要
+
+- Phase 2 稳定性准备任务提交（按 Task 分段）：
+  - Task 1: `a431a13`（failure-path diagnostics）
+  - Task 2: `5f35b63`（real codex approval smoke validation）
+  - Task 3: `2ec1e11`（transient signature registry）
+  - Task 4: `b5a13f5`（Phase 2 Entry Gate 文档门槛）
+- Task 5 已完成（全量回归 + 收口）：
+  - `pnpm lint`、`pnpm typecheck`、`pnpm test -- --maxWorkers=1`、`pnpm test:e2e`、`pnpm validate:real-codex` 全部通过。
+  - `typecheck` 前执行 `pnpm exec prisma generate` 以恢复 Prisma 类型生成。
+  - 收口修复：
+    - `tests/e2e/real-codex-validation.test.ts` 迁移到 `tests/scripts/real-codex-validation.test.ts`，避免 e2e 误执行；
+    - `validate:real-codex` 增加 `404` 轮询重试和多候选危险提示词策略，提升审批触发稳定性。
+- 残余风险：
+  - `validate:real-codex` 依赖真实 codex 环境与 `localhost:43173` 可达性，服务/鉴权/模型策略变化会影响结果。
+- 回滚说明：
+  - 可按 Task 粒度回退 `a431a13`、`5f35b63`、`2ec1e11`、`b5a13f5`，以及本批最终收口提交。
 
 - 已完成 Phase 2 稳定性准备第一批（Task 1-4）：
   - failure-path diagnostics：超时异常增加 `diag`（thread/turn/notification/thread-read 时间摘要）。

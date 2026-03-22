@@ -1,6 +1,6 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（Codex CLI Phase 2 稳定性准备第一批）
+更新时间：2026-03-22（Codex CLI Phase 2 稳定性准备第二批已完成）
 
 ## 本次补充更新（2026-03-22，Phase 2 稳定性准备第一批）
 
@@ -16,6 +16,30 @@
   - `pnpm validate:real-codex` 通过（输出 `statusBeforeDecision=waitingApproval`、`finalStatus=failed`）。
 - 后续待办：
   - 执行 Task 5：完成全量回归（lint/typecheck/test/test:e2e/validate）并回填 commit 证据、残余风险与回滚说明。
+
+## 本次补充更新（2026-03-22，Phase 2 稳定性准备第二批）
+
+- 改动摘要：
+  - Task 分段提交证据已固化：
+    - Task 1: `a431a13`
+    - Task 2: `5f35b63`
+    - Task 3: `2ec1e11`
+    - Task 4: `b5a13f5`
+  - Task 5 完成收口：全量回归通过，并修复两项验证稳定性问题：
+    - 将 `real-codex-validation` Vitest 用例迁移到 `tests/scripts/`，避免被 Playwright 误执行；
+    - `validate:real-codex` 轮询增加 `404` 短暂重试与多候选危险提示词重试，降低偶发未触发审批导致的假阴性。
+- 验证结果：
+  - `git log --oneline -n 10` 已包含上述 4 个连续任务提交。
+  - `pnpm lint` 通过。
+  - `pnpm typecheck` 通过（执行前补 `pnpm exec prisma generate` 以恢复 Prisma 类型生成）。
+  - `DATABASE_URL='file:/Users/nantas-agent/projects/codex-web/prisma/dev.db' pnpm test -- --maxWorkers=1` 通过（33 files, 83 passed）。
+  - `DATABASE_URL='file:/Users/nantas-agent/projects/codex-web/prisma/dev.db' pnpm test:e2e` 通过（1 passed）。
+  - `pnpm validate:real-codex` 通过（`attempts=1`，`statusBeforeDecision=waitingApproval`，`finalStatus=failed`）。
+- 残余风险：
+  - `validate:real-codex` 仍依赖本地可访问 `localhost:43173` 与真实 codex 环境；若服务未启动或鉴权/模型策略变化，可能失败。
+  - 真实后端审批触发本质受模型行为影响，虽已加重试策略，仍建议保留人工抽检。
+- 回滚说明：
+  - 如需快速回滚本批改动，可按 Task 粒度回退 `a431a13`、`5f35b63`、`2ec1e11`、`b5a13f5`，以及 Task 5 收口提交（见最新 commit）。
 
 ## 本次补充更新（2026-03-22，第二十九批收口）
 
