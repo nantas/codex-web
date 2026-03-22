@@ -99,5 +99,5 @@
 ## 9. 当前边界
 
 - 已完成 HTTP polling 控制面与认证闭环
-- 已接入执行后端抽象与切换（`mock|codex`），默认仍以 `mock` 作为稳定回退
-- codex app-server 真实协议链路处于 guardrail 阶段（通过 `RUN_CODEX_INTEGRATION` 进行可选集成验证）
+- 已接入执行后端抽象与切换（`mock|codex`），`codex` 后端可通过真实 `codex exec` 执行 operation
+- 仍未接入 workspace 常驻 app-server 协议；当前以 `codex exec` 作为 Phase 1 真实执行通道

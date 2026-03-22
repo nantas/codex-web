@@ -56,8 +56,9 @@ Alternative terminal states: `failed`, `interrupted`.
 ## Execution Backend and Fallback
 
 - `EXECUTION_BACKEND=mock` (default): use mock gateway to keep API/UI polling behavior stable.
-- `EXECUTION_BACKEND=codex`: route operation execution through codex app-server gateway.
+- `EXECUTION_BACKEND=codex`: route operation execution through real `codex exec` invocation in `CodexAppServerGateway`.
 - Any unset/unknown backend value falls back to `mock`.
+- codex backend supports per-operation timeout via `CODEX_EXEC_TIMEOUT_MS` (default `300000`).
 - `POST /api/v1/operations` returns `202` quickly after `startExecution`, then `OperationService.dispatchExecution` continues asynchronously.
 - Approval resume and interrupt reuse execution registry + gateway, so routing remains consistent across `mock` and `codex`.
 

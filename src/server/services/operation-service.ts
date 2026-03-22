@@ -95,6 +95,8 @@ export class OperationService {
 
       const result = await this.deps.gateway.startTurn({
         operationId: operation.id,
+        workspaceId: operation.session.workspaceId,
+        cwd: operation.session.cwd,
         sessionId: operation.sessionId,
         threadId: operation.session.threadId,
         text: operation.requestText,

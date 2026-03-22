@@ -12,6 +12,8 @@ export class MockRunnerGateway implements RunnerGateway {
 
   async startTurn(input: {
     operationId: string;
+    workspaceId: string;
+    cwd: string;
     sessionId: string;
     threadId: string;
     text: string;

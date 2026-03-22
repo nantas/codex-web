@@ -40,10 +40,17 @@ Enable codex backend when running dev server:
 EXECUTION_BACKEND=codex pnpm dev
 ```
 
+Optional runtime timeout for one codex execution (milliseconds):
+
+```bash
+CODEX_EXEC_TIMEOUT_MS=300000 EXECUTION_BACKEND=codex pnpm dev
+```
+
 Fallback strategy:
 
 - If `EXECUTION_BACKEND` is unset or invalid, service falls back to `mock`.
 - Keep `mock` as rollback option when codex runtime/protocol is unstable.
+- Current codex backend executes real `codex exec` commands per operation, supports interrupt via process signal, and keeps approval resume in the same workspace context.
 
 ## Required `.env` (Sanitized Template)
 

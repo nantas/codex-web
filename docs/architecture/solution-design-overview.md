@@ -119,7 +119,7 @@
 ### 4.5 执行后端切换与降级
 
 1. 默认 `EXECUTION_BACKEND=mock`，保证本地与测试稳定。
-2. 显式设置 `EXECUTION_BACKEND=codex` 时，启用 codex app-server gateway。
+2. 显式设置 `EXECUTION_BACKEND=codex` 时，启用真实 `codex exec` 执行后端。
 3. codex backend 不可用或协议不稳定时，可直接回退到 `mock`。
 4. 中断仅对活动态 operation 生效；已终态 operation 保持原状态，避免竞态改写。
 

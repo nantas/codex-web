@@ -13,6 +13,8 @@ export type RunnerGateway = {
   ensureRunner(input: { workspaceId: string; cwd: string }): Promise<void>;
   startTurn(input: {
     operationId: string;
+    workspaceId: string;
+    cwd: string;
     sessionId: string;
     threadId: string;
     text: string;
