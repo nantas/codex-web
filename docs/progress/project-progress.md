@@ -19,6 +19,9 @@
   - 实机 API 复验记录：
     - `localhost:43173` 下可复现 `running -> waitingApproval`；
     - 仍观察到一条真实后端超时失败样本：`[APP_SERVER_TIMEOUT] waiting for modern app-server turn completion timed out`（需在后续真实网页联调阶段继续收敛）。
+  - 实机网页复验记录（`localhost:43173/sessions/:sessionId`）：
+    - approve 链路通过：`waitingApproval -> approved -> operation completed`（会话 `cmn1qah060060f4jc4ljpjqfc`）。
+    - deny 链路通过：`waitingApproval -> denied -> operation failed`（会话 `cmn1q9zr2005tf4jcrohwh07u`）。
 - 后续待办：
   - 在“真实网页人工验证”阶段继续跟踪默认策略下审批触发稳定性，确认是否需要将强制审批策略工具化为标准验证入口。
   - 若继续使用多地址本地验证，评估补充 `allowedDevOrigins` 以降低 `127.0.0.1` 与 `localhost` 行为差异。

@@ -31,6 +31,9 @@
 - `DATABASE_URL='file:/Users/nantas-agent/projects/codex-web/prisma/dev.db' pnpm test -- --maxWorkers=1`：通过（31 files, 77 passed）
 - `pnpm test:e2e`：通过（1 passed）
 - 真实 codex 后端复验：可达 `waitingApproval`，但存在 1 条超时失败样本（默认策略场景）
+- 真实网页复验（`localhost:43173/sessions/:sessionId`）：
+  - approve 通过（`cmn1qah060060f4jc4ljpjqfc`）：operation `completed`，approval `approved`
+  - deny 通过（`cmn1q9zr2005tf4jcrohwh07u`）：operation `failed`，approval `denied`
 
 ## 下一位 Agent 接手
 
