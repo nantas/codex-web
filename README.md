@@ -53,6 +53,7 @@ Fallback strategy:
 - Keep `mock` as rollback option when codex runtime/protocol is unstable.
 - Current codex backend uses workspace-resident app-server process first for turn/approval/interrupt.
 - Gateway falls back to real `codex exec` only when app-server is unavailable; protocol/execution/timeout failures return classified errors instead of silent fallback.
+- app-server protocol adapter now targets real codex slash methods (`initialize`, `thread/start`, `turn/start`, `thread/read`, `turn/interrupt`) and keeps legacy dot-method compatibility for older fixtures/protocols.
 - Approval continuation token is threaded through service -> gateway on resume to avoid prompt replay semantics.
 - `CODEX_BIN` can override codex executable path (used by deterministic integration tests and local debugging).
 
@@ -113,6 +114,19 @@ Then:
 3. In `Send Turn`, input text and click `Send`.
 4. Confirm new operation appears in history and status progresses (`running -> completed` in mock).
 5. If operation requests approval, verify `Approve/Deny` still works.
+
+Real codex backend quick check (API + web):
+
+```bash
+NEXTAUTH_SECRET=dev-secret EXECUTION_BACKEND=codex DATABASE_URL="file:./dev.db" pnpm dev
+```
+
+Then:
+
+1. `curl -s -X POST http://127.0.0.1:43173/api/v1/sessions -H 'content-type: application/json' -H 'x-github-id: dev-manual' -d '{"workspaceId":"ws-real","cwd":"<ABS_WORKSPACE_PATH>"}'`
+2. `curl -s -X POST http://127.0.0.1:43173/api/v1/operations -H 'content-type: application/json' -H 'x-github-id: dev-manual' -d '{"sessionId":"<sessionId>","type":"turn.start","input":[{"type":"text","text":"Reply with exactly: MANUAL_OK"}]}'`
+3. Poll `GET /api/v1/operations/<operationId>` until terminal status and confirm `resultText`.
+4. Open `http://localhost:43173/sessions/<sessionId>` and validate `Send Turn` end-to-end in page.
 
 ## Start OAuth Sign-In
 

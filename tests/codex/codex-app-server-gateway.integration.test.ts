@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -32,6 +32,12 @@ describe("codex app-server integration", () => {
         status: "completed",
         resultText: "app:Reply with exactly: integration-ok",
       });
+
+      const logContent = await readFile(fakeLogFile, "utf8");
+      expect(logContent).toContain("app-server:initialize");
+      expect(logContent).toContain("app-server:thread/start");
+      expect(logContent).toContain("app-server:turn/start");
+      expect(logContent).toContain("app-server:thread/read");
     } finally {
       if (previousCodexBin === undefined) delete process.env.CODEX_BIN;
       else process.env.CODEX_BIN = previousCodexBin;

@@ -39,4 +39,57 @@ describe("AppServerProcessManager", () => {
       outputText: "app:from-manager-test",
     });
   });
+
+  it("waits for modern slash-protocol notifications", async () => {
+    process.env.CODEX_BIN = join(process.cwd(), "tests/fixtures/fake-codex-cli.mjs");
+
+    const manager = new AppServerProcessManager();
+    await manager.sendRequest({
+      workspaceId: "ws-3",
+      cwd: process.cwd(),
+      method: "initialize",
+      params: {
+        clientInfo: {
+          name: "codex-web",
+          version: "0.1.0",
+        },
+      },
+    });
+
+    const threadStart = await manager.sendRequest({
+      workspaceId: "ws-3",
+      cwd: process.cwd(),
+      method: "thread/start",
+      params: {
+        cwd: process.cwd(),
+      },
+    });
+
+    const threadId = (threadStart as { thread?: { id?: string } }).thread?.id;
+    expect(typeof threadId).toBe("string");
+
+    await manager.sendRequest({
+      workspaceId: "ws-3",
+      cwd: process.cwd(),
+      method: "turn/start",
+      params: {
+        threadId,
+        input: [{ type: "text", text: "hello-notification" }],
+      },
+    });
+
+    const notification = await manager.waitForNotification({
+      workspaceId: "ws-3",
+      cwd: process.cwd(),
+      timeoutMs: 5_000,
+      predicate: (payload) => payload.method === "turn/completed",
+    });
+
+    expect(notification).toMatchObject({
+      method: "turn/completed",
+      params: {
+        threadId,
+      },
+    });
+  });
 });
