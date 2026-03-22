@@ -1,12 +1,12 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第十八批已完成）
+更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第十九批已完成）
 
 ## 1. 总体状态
 
 - 阶段：MVP 已完成（可运行、可登录、可轮询、可审批）
 - 当前分支：`main`
-- 状态：进入“真实执行链路接入”前的控制面增强阶段
+- 状态：真实执行链路 Phase 1 已落地（`codex exec`），进入“未收口项补全”阶段
 
 ## 2. 本次更新（2026-03-22）
 
@@ -40,6 +40,9 @@
   - 第十八批（本次完成）：`CodexAppServerGateway` 从占位实现升级为真实 `codex exec` 调用，`startTurn` 与 `resumeAfterApproval` 可触发真实 CLI 执行。
   - 第十八批（本次完成）：gateway 增加活动进程跟踪与中断信号处理（`SIGINT` -> `SIGKILL` 回退），支持 `interrupt` 与执行超时控制（`CODEX_EXEC_TIMEOUT_MS`）。
   - 第十八批（本次完成）：`RunnerManager` 增加 `ready/failed/stopped/touch` 生命周期更新；执行服务 startTurn 入参补充 `workspaceId/cwd`，用于真实后端按 workspace/cwd 执行。
+  - 第十九批（本次完成）：补齐文档收口（README 预检增加 `codex login`、集成验证命令；进度状态与未完成项同步真实现状）。
+  - 第十九批（本次完成）：完成 `EXECUTION_BACKEND=codex` 在线人工验证（健康检查、真实执行、审批 approve/deny、中断、日志查询）并记录结果。
+  - 第十九批（本次完成）：产出未收口项执行计划文档 `docs/plans/2026-03-22-codex-execution-unclosed-items-implementation-plan.md`。
   - 新增 `pollIntervalMs` 组件参数用于稳定测试与轮询行为控制。
   - 新增 `session-detail-url-state` 解析/序列化工具，统一 URL 状态处理逻辑。
   - `OperationLogService.list` 新增 `level/time-range` 过滤能力，与 cursor 查询可组合使用。
@@ -66,11 +69,12 @@
   - 第十七批验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test -- tests/api/operation-interrupt.route.test.ts tests/services/operation-execution.service.test.ts`（52 passed, 1 skipped）。
   - 第十八批验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test`（24 passed, 1 skipped）、`pnpm test:e2e`（1 passed）。
   - 第十八批集成验证通过：`RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm test -- tests/codex/codex-app-server-gateway.integration.test.ts`（通过）。
+  - 第十九批在线验证通过：`EXECUTION_BACKEND=codex` 运行下，`POST /api/v1/operations` 返回真实结果（`CODERUN_OK`），审批 `approve/deny` 与 `interrupt` 路径状态收敛正确，`/api/v1/operations/:id/logs` 可读。
 - 后续待办：
-  - 按实施计划进入真实执行链路编码阶段（Protocol Spike -> startTurn -> approval/interruption）。
+  - 继续推进未收口项：workspace 常驻 app-server 协议、真实审批触发事件、resume 语义与常驻线程一致化。
   - 增加 operation 历史筛选与搜索能力。
   - 增加日志失败提示的本地化时间展示与用户时区格式切换。
-  - 补充 codex app-server 协议细节（线程恢复、审批事件映射、日志回写）并将 integration test 从 guard 模式推进到可稳定执行。
+  - 补充 codex app-server 协议细节（线程恢复、审批事件映射、日志回写）并将 integration test 从 guard 模式推进到默认稳定执行。
   - 真实后端人工验证准备（Codex）：
     - 持续收敛 `codex exec` 后端行为与错误分类（鉴权失败、超时、进程异常）并补充回归用例。
     - 将当前 `codex exec` 执行后端演进为设计目标中的 workspace 常驻 app-server 协议通道。

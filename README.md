@@ -32,6 +32,7 @@ To preflight Codex CLI before enabling real execution backend:
 ```bash
 which codex
 codex --version
+codex login
 ```
 
 Enable codex backend when running dev server:
@@ -51,6 +52,12 @@ Fallback strategy:
 - If `EXECUTION_BACKEND` is unset or invalid, service falls back to `mock`.
 - Keep `mock` as rollback option when codex runtime/protocol is unstable.
 - Current codex backend executes real `codex exec` commands per operation, supports interrupt via process signal, and keeps approval resume in the same workspace context.
+
+Optional integration validation (real codex backend):
+
+```bash
+RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm test -- tests/codex/codex-app-server-gateway.integration.test.ts
+```
 
 ## Required `.env` (Sanitized Template)
 
