@@ -32,6 +32,7 @@
 - `/sessions` 展示真实会话列表（状态、workspace、待审批数量、最新 operation）
 - `/sessions` 基于客户端轮询自动刷新列表状态
 - `/sessions/[sessionId]` 展示真实详情（最新 operation 与待审批队列）并支持审批决策交互
+- `/sessions/[sessionId]` 支持网页输入并发送 `turn.start`（`Send Turn` composer）
 - `/sessions/[sessionId]` 展示 operation 历史时间线并支持分页浏览
 
 ### 3.2 API 层（Route Handlers）
@@ -87,7 +88,7 @@
 
 ### 4.2 提交与轮询流程
 
-1. `POST /api/v1/operations` 创建 `queued`。
+1. 会话详情页 `Send Turn` 或其他客户端调用 `POST /api/v1/operations` 创建 `queued`。
 2. 服务调用 `startExecution`，先推进至 `running` 并立即返回 `202`。
 3. 后台异步 `dispatchExecution` 通过 `RunnerGateway` 执行 turn。
 4. 客户端轮询 `GET /api/v1/operations/:id`。
@@ -97,7 +98,7 @@
 
 1. 操作进入 `waitingApproval` 并生成 `Approval(pending)`。
 2. 用户提交审批决定。
-3. `approve` -> route 调用 `resumeAfterApproval`，由 gateway 继续执行并回写状态；
+3. `approve` -> route 调用 `resumeAfterApproval`，优先使用 continuation token 继续执行并回写状态；
 4. `deny` -> operation 变 `failed`（并记录失败日志）。
 
 ### 4.4 会话查看流程
@@ -119,7 +120,7 @@
 ### 4.5 执行后端切换与降级
 
 1. 默认 `EXECUTION_BACKEND=mock`，保证本地与测试稳定。
-2. 显式设置 `EXECUTION_BACKEND=codex` 时，启用真实 `codex exec` 执行后端。
+2. 显式设置 `EXECUTION_BACKEND=codex` 时，启用真实后端（`app-server` 优先，`codex exec` 回退）。
 3. codex backend 不可用或协议不稳定时，可直接回退到 `mock`。
 4. 中断仅对活动态 operation 生效；已终态 operation 保持原状态，避免竞态改写。
 

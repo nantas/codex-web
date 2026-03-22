@@ -38,15 +38,18 @@ export class NoopAppServerClient implements AppServerClient {
     return false;
   }
 
-  async startTurn(_input: AppServerTurnInput): Promise<AppServerTurnEvent> {
+  async startTurn(input: AppServerTurnInput): Promise<AppServerTurnEvent> {
+    void input;
     throw new Error("app-server unavailable");
   }
 
-  async resumeAfterApproval(_input: AppServerResumeInput): Promise<AppServerTurnEvent> {
+  async resumeAfterApproval(input: AppServerResumeInput): Promise<AppServerTurnEvent> {
+    void input;
     throw new Error("app-server unavailable");
   }
 
-  async interruptTurn(_input: AppServerInterruptInput): Promise<void> {
+  async interruptTurn(input: AppServerInterruptInput): Promise<void> {
+    void input;
     throw new Error("app-server unavailable");
   }
 }
