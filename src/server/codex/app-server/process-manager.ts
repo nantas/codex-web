@@ -19,6 +19,15 @@ type AppServerProcessHandle = AppServerProcessMeta & {
       timeout: NodeJS.Timeout;
     }
   >;
+  notificationWaiters: Map<
+    string,
+    {
+      predicate: (payload: Record<string, unknown>) => boolean;
+      resolve: (payload: Record<string, unknown>) => void;
+      reject: (error: AppServerClientError) => void;
+      timeout: NodeJS.Timeout;
+    }
+  >;
   stdoutBuffer: string;
   closed: boolean;
 };
@@ -46,6 +55,7 @@ export class AppServerProcessManager {
       startedAt: new Date().toISOString(),
       child,
       pending: new Map(),
+      notificationWaiters: new Map(),
       stdoutBuffer: "",
       closed: false,
     };
@@ -119,6 +129,42 @@ export class AppServerProcessManager {
     });
   }
 
+  async waitForNotification(input: {
+    workspaceId: string;
+    cwd: string;
+    timeoutMs?: number;
+    predicate: (payload: Record<string, unknown>) => boolean;
+  }): Promise<Record<string, unknown>> {
+    const timeoutMs = Math.max(1_000, input.timeoutMs ?? 30_000);
+    await this.getOrStart(input.workspaceId, { cwd: input.cwd });
+    const handle = this.byWorkspace.get(input.workspaceId);
+
+    if (!handle || handle.closed) {
+      throw new AppServerClientError("unavailable", "app-server process not available");
+    }
+
+    const waiterId = randomUUID();
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        handle.notificationWaiters.delete(waiterId);
+        reject(new AppServerClientError("timeout", `app-server notification wait timed out (${timeoutMs}ms)`));
+      }, timeoutMs);
+
+      handle.notificationWaiters.set(waiterId, {
+        predicate: input.predicate,
+        resolve: (payload) => {
+          clearTimeout(timeout);
+          resolve(payload);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+        timeout,
+      });
+    });
+  }
+
   private spawnProcess(cwd: string) {
     const command = getCodexCommand();
 
@@ -180,6 +226,12 @@ export class AppServerProcessManager {
 
     const id = typeof payload.id === "string" ? payload.id : null;
     if (!id) {
+      const method = payload.method;
+      if (typeof method === "string") {
+        this.handleNotification(handle, payload);
+        return;
+      }
+
       this.rejectAllPending(handle, new AppServerClientError("protocol", "missing app-server response id"));
       return;
     }
@@ -203,11 +255,38 @@ export class AppServerProcessManager {
     pending.resolve(payload.result);
   }
 
+  private handleNotification(handle: AppServerProcessHandle, payload: Record<string, unknown>) {
+    for (const [id, waiter] of handle.notificationWaiters.entries()) {
+      let matched = false;
+      try {
+        matched = waiter.predicate(payload);
+      } catch {
+        matched = false;
+      }
+
+      if (!matched) {
+        continue;
+      }
+
+      handle.notificationWaiters.delete(id);
+      clearTimeout(waiter.timeout);
+      waiter.resolve(payload);
+    }
+  }
+
   private rejectAllPending(handle: AppServerProcessHandle, error: AppServerClientError) {
     for (const [id, pending] of handle.pending.entries()) {
       handle.pending.delete(id);
       clearTimeout(pending.timeout);
       pending.reject(error);
+    }
+  }
+
+  private rejectAllNotificationWaiters(handle: AppServerProcessHandle, error: AppServerClientError) {
+    for (const [id, waiter] of handle.notificationWaiters.entries()) {
+      handle.notificationWaiters.delete(id);
+      clearTimeout(waiter.timeout);
+      waiter.reject(error);
     }
   }
 
@@ -218,6 +297,7 @@ export class AppServerProcessManager {
 
     handle.closed = true;
     this.rejectAllPending(handle, reason);
+    this.rejectAllNotificationWaiters(handle, reason);
     this.byWorkspace.delete(handle.workspaceId);
   }
 }

@@ -91,6 +91,7 @@
 - 在 `mock` 与 `codex` 后端间可切换，异常时可快速回退到 `mock`
 - codex 后端下优先复用协议链路（审批恢复/中断）
 - app-server 仅在 `unavailable` 错误时回落 `exec`，协议/执行/超时错误直接分类返回
+- app-server 协议实现已对齐真实 codex slash 方法，并保留 legacy dot-method 兼容
 
 ## 8. 工程命令（当前）
 
@@ -100,10 +101,12 @@
 - `pnpm lint` / `pnpm typecheck` / `pnpm test` / `pnpm test:e2e`
 - `which codex` / `codex --version` / `codex login`：启用 codex 后端前的本机预检
 - `pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts`：默认稳定的 codex 集成校验（fake codex fixture）
+- `NEXTAUTH_SECRET=dev-secret EXECUTION_BACKEND=codex DATABASE_URL=\"file:./dev.db\" pnpm dev`：真实 codex 后端人工验证启动命令
 
 ## 9. 当前边界
 
 - 已完成 HTTP polling 控制面与认证闭环
 - 已接入执行后端抽象与切换（`mock|codex`），`codex` 后端可通过真实 `codex exec` 执行 operation
 - 已具备网页会话详情 `Send Turn` 入口，可直接触发 `turn.start`
-- 已接入 workspace 常驻 app-server 协议通道；真实生产验证仍需覆盖真实 codex 环境下的长时间运行与审批恢复边界
+- 已接入 workspace 常驻 app-server 协议通道，已完成真实 codex 手工验证（API 提交 + 网页 Send Turn + interrupt + logs）
+- 真实生产验证仍需覆盖更长时间运行与审批恢复边界

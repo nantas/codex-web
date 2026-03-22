@@ -1,28 +1,29 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十一批已完成）
+更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第二十二批已完成）
 
-## 0. 本次补充更新（2026-03-22，第二十一批收口）
+## 0. 本次补充更新（2026-03-22，第二十二批收口）
 
 - 改动摘要：
-  - 完成 codex 后端常驻 app-server 实链路接入：`AppServerProcessManager` 由占位实现升级为真实 `codex app-server` 子进程管理（workspace 维度复用 + JSON line 请求/响应关联）。
-  - `CodexAppServerGateway` 收敛 fallback 规则：仅 `app-server unavailable` 才回退 `codex exec`；协议/执行/超时类错误直接返回分类失败信息。
-  - 补齐 codex 执行失败分类（含鉴权失败 `CODEX_AUTH`、二进制缺失 `CODEX_BINARY_MISSING`）并新增 `CODEX_BIN` 可执行覆盖能力（测试与调试可复用）。
-  - codex integration 测试从 guard/skipped 升级为默认稳定执行（使用 `tests/fixtures/fake-codex-cli.mjs`）。
+  - app-server 客户端协议细化：适配真实 codex slash 协议（`initialize`、`thread/start`、`turn/start`、`thread/read`、`turn/interrupt`），并保留 legacy dot-method 兼容回退。
+  - `AppServerProcessManager` 新增通知等待能力（`waitForNotification`），用于协议事件等待与后续扩展。
+  - 修复执行竞态：`OperationService.dispatchExecution` 异常路径增加终态保护，避免中断后被失败回写覆盖。
+  - 升级 fake codex fixture，同步支持 modern slash 协议与 legacy 协议，codex 集成测试补充 modern 路径断言。
   - 架构/运行文档同步：README、`mvp-runtime`、`solution-design-overview`、`tech-stack-overview` 更新为当前真实行为。
 - 验证结果：
   - `pnpm lint`、`pnpm typecheck` 通过。
-  - `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-hardening/prisma/dev.db" pnpm test` 通过（30 files, 69 passed）。
-  - `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-hardening/prisma/dev.db" pnpm test:e2e` 通过（1 passed）。
+  - `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-manual-validation/prisma/dev.db" pnpm test` 通过（30 files, 70 passed）。
+  - `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-manual-validation/prisma/dev.db" pnpm test:e2e` 通过（1 passed）。
+  - 真实 codex 人工验证通过：`/api/health`、API 提交对话、interrupt、logs 查询、网页 `Send Turn`（`MANUAL_WEB_OK`）均通过。
 - 后续待办：
-  - 执行真实 codex CLI 人工验证（网页端 `Send Turn`、审批恢复、中断、日志可见性、本地/远程可达性）。
   - 继续补齐 app-server 长时间运行场景下的协议事件覆盖（真实审批触发事件、resume 语义与线程恢复一致性）。
+  - 完成真实审批恢复链路的人工验证闭环（approve/deny + continuation token + resume）。
 
 ## 1. 总体状态
 
 - 阶段：MVP 已完成（可运行、可登录、可轮询、可审批）
 - 当前分支：`main`
-- 状态：真实执行链路 Phase 1 关键未收口项已完成，进入“真实 codex CLI 人工验证 + app-server 协议细化”阶段
+- 状态：真实执行链路 Phase 1 关键未收口项已完成；真实人工验证已完成一轮，进入“审批恢复与线程恢复语义细化”阶段
 
 ## 2. 本次更新（2026-03-22）
 
@@ -66,6 +67,9 @@
   - 第二十一批（本次完成）：`AppServerProcessManager` 升级为真实 `codex app-server` 进程管理器（workspace 常驻复用、请求超时、协议解析与进程退出处理）。
   - 第二十一批（本次完成）：gateway fallback 语义收敛为“仅 unavailable 回退 exec”，app-server 协议/执行/超时异常改为分类失败返回（不再静默降级）。
   - 第二十一批（本次完成）：新增 codex exec 错误分类测试（鉴权失败）并将 integration 用例改为默认稳定执行（fake codex fixture + `CODEX_BIN`）。
+  - 第二十二批（本次完成）：app-server client 对齐真实 codex slash 协议（`initialize/thread/start/turn/start/thread/read/turn/interrupt`），并保留 legacy 协议回退。
+  - 第二十二批（本次完成）：`OperationService` 异常路径补齐终态保护，避免中断态被失败回写覆盖。
+  - 第二十二批（本次完成）：完成真实 codex 后端人工验证（API + 网页 Send Turn + interrupt + logs）。
   - 新增 `pollIntervalMs` 组件参数用于稳定测试与轮询行为控制。
   - 新增 `session-detail-url-state` 解析/序列化工具，统一 URL 状态处理逻辑。
   - `OperationLogService.list` 新增 `level/time-range` 过滤能力，与 cursor 查询可组合使用。
@@ -97,6 +101,8 @@
   - 第二十批专项通过：`pnpm exec vitest run tests/codex/codex-app-server-interrupt.test.ts tests/services/operation-execution.service.test.ts tests/ui/session-detail-live.test.tsx`。
   - 第二十批集成验证通过：`RUN_CODEX_INTEGRATION=1 CODEX_EXEC_TIMEOUT_MS=60000 pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts`。
   - 第二十一批验证通过：`pnpm lint`、`pnpm typecheck`、`DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-hardening/prisma/dev.db" pnpm test`（30 files, 69 passed）、`DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-hardening/prisma/dev.db" pnpm test:e2e`（1 passed）。
+  - 第二十二批验证通过：`pnpm lint`、`pnpm typecheck`、`DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-manual-validation/prisma/dev.db" pnpm test`（30 files, 70 passed）、`DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-manual-validation/prisma/dev.db" pnpm test:e2e`（1 passed）。
+  - 第二十二批真实后端人工验证通过：`EXECUTION_BACKEND=codex` 下 API `turn.start` -> `completed`、网页 `Send Turn` -> `MANUAL_WEB_OK`、interrupt -> `interrupted`、logs 可读。
 - 后续待办：
   - 继续推进未收口项：真实审批触发事件、resume 语义与常驻线程一致化。
   - 增加 operation 历史筛选与搜索能力。
@@ -167,20 +173,21 @@
 
 - `pnpm lint`：通过
 - `pnpm typecheck`：通过
-- `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-hardening/prisma/dev.db" pnpm test`：通过（30 files, 69 passed）
-- `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-hardening/prisma/dev.db" pnpm test:e2e`：通过（1 test）
+- `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-manual-validation/prisma/dev.db" pnpm test`：通过（30 files, 70 passed）
+- `DATABASE_URL="file:/Users/nantas-agent/projects/codex-web/.worktrees/codex-cli-manual-validation/prisma/dev.db" pnpm test:e2e`：通过（1 test）
 - `pnpm exec vitest run tests/codex/codex-app-server-gateway.integration.test.ts`：通过（默认稳定，不再依赖 `RUN_CODEX_INTEGRATION`）
+- 真实 codex 人工验证：通过（`/api/health`、`POST /api/v1/operations(type=turn.start)`、`POST /api/v1/operations/:id/interrupt`、网页 `Send Turn`）
 
 ## 7. 未完成/后续工作
 
-- 真实 Codex CLI 已接入 workspace 常驻 `app-server first + exec fallback`
+- 真实 Codex CLI 已接入 workspace 常驻 `app-server first + exec fallback`，并完成一轮 API/网页人工验证
 - 前端会话/详情已具备自动刷新、审批与网页发送 turn，仍需补齐更多生产级可观测性与异常恢复手册
 - 生产部署（HTTPS、反向代理、监控告警）尚未标准化
 
 ## 8. 建议下一阶段（P1）
 
-1. 完成真实后端人工验证闭环（Codex app-server 协议 + 手动验证清单执行）
-2. 补齐 app-server 协议事件覆盖（真实审批触发、resume 语义、线程恢复）
+1. 补齐 app-server 协议事件覆盖（真实审批触发、resume 语义、线程恢复）
+2. 完成真实审批恢复闭环人工验证（approve/deny + continuation token）
 3. 完成自动增量拉取下的前端缓存策略与可观测性增强（含 URL 状态同步）
 4. 增加 OAuth 与关键 API 的失败场景自动化测试
 5. 增加部署文档（systemd/pm2 + reverse proxy + TLS）

@@ -114,7 +114,9 @@ export class OperationService {
         this.deps.registry.delete(operation.id);
       }
     } catch (error) {
-      await this.failOperation(operationId, toErrorMessage(error));
+      if (await this.shouldApplyExecutionResult(operationId)) {
+        await this.failOperation(operationId, toErrorMessage(error));
+      }
       this.deps.registry.delete(operationId);
     }
   }

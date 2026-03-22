@@ -7,7 +7,7 @@
 - `src/server/codex/runner-manager.ts`: in-process runner runtime manager keyed by `workspaceId`.
 - `src/server/codex/app-server/client.ts`: app-server protocol client interface + noop adapter.
 - `src/server/codex/app-server/process-manager.ts`: workspace-scoped app-server process manager (persistent `codex app-server` subprocess + request/response correlation).
-- `src/server/codex/app-server/codex-cli-app-server-client.ts`: real app-server client adapter over process manager.
+- `src/server/codex/app-server/codex-cli-app-server-client.ts`: real app-server client adapter over process manager (modern slash protocol + legacy compatibility).
 - `src/server/codex/runner-gateway.ts`: backend gateway abstraction + factory.
 - `src/server/services/operation-execution-registry.ts`: in-memory operation execution references for resume/interrupt.
 - `src/server/services/session-service.ts`: session creation/read logic.
@@ -69,6 +69,7 @@ Alternative terminal states: `failed`, `interrupted`.
 - Approval resume threads `continuationToken` from gateway result -> execution registry -> resume call.
 - Interrupt uses protocol-first path (`app-server interrupt`) and falls back to process signals (`SIGINT` -> `SIGKILL`).
 - app-server fallback policy is strict: only `unavailable` errors fallback to `codex exec`; protocol/execution/timeout errors are surfaced with classified failure text.
+- app-server adapter now speaks real codex methods (`initialize`, `thread/start`, `turn/start`, `thread/read`, `turn/interrupt`) and keeps legacy `turn.start`/`turn.resume`/`turn.interrupt` fallback for compatibility.
 
 ## Approval Queue Behavior
 

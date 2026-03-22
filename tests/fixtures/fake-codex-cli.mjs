@@ -2,6 +2,9 @@
 import fs from "node:fs";
 
 const args = process.argv.slice(2);
+const threads = new Map();
+let threadSeq = 0;
+let turnSeq = 0;
 
 function writeLog(message) {
   const logPath = process.env.CODEX_FAKE_LOG;
@@ -62,12 +65,10 @@ function runAppServer() {
       try {
         request = JSON.parse(line);
       } catch {
-        process.stdout.write(
-          JSON.stringify({
-            id: "invalid",
-            error: { code: "protocol", message: "invalid json" },
-          }) + "\n",
-        );
+        reply({
+          id: "invalid",
+          error: { code: "protocol", message: "invalid json" },
+        });
         continue;
       }
 
@@ -75,55 +76,282 @@ function runAppServer() {
       const params = request.params ?? {};
       writeLog(`app-server:${method}`);
 
+      // Legacy protocol (kept for backward compatibility tests)
       if (method === "turn.start") {
-        process.stdout.write(
-          JSON.stringify({
-            id: request.id,
-            result: {
-              id: "turn-start-1",
-              type: "turn.completed",
-              outputText: `app:${String(params.text ?? "")}`,
-            },
-          }) + "\n",
-        );
+        reply({
+          id: request.id,
+          result: {
+            id: "turn-start-legacy",
+            type: "turn.completed",
+            outputText: `app:${String(params.text ?? "")}`,
+          },
+        });
         continue;
       }
 
       if (method === "turn.resume") {
-        process.stdout.write(
-          JSON.stringify({
-            id: request.id,
-            result: {
-              id: "turn-resume-1",
-              type: "turn.completed",
-              outputText: "app:resumed",
-            },
-          }) + "\n",
-        );
+        reply({
+          id: request.id,
+          result: {
+            id: "turn-resume-legacy",
+            type: "turn.completed",
+            outputText: "app:resumed",
+          },
+        });
         continue;
       }
 
       if (method === "turn.interrupt") {
-        process.stdout.write(
-          JSON.stringify({
-            id: request.id,
-            result: { ok: true },
-          }) + "\n",
-        );
+        reply({
+          id: request.id,
+          result: { ok: true },
+        });
         continue;
       }
 
-      process.stdout.write(
-        JSON.stringify({
+      // Modern slash protocol used by real codex app-server
+      if (method === "initialize") {
+        reply({
           id: request.id,
-          error: {
-            code: "execution",
-            message: `unsupported method: ${String(method)}`,
+          result: {
+            userAgent: "codex-fake/0.0.1",
+            platformFamily: "unix",
+            platformOs: "macos",
           },
-        }) + "\n",
-      );
+        });
+        continue;
+      }
+
+      if (method === "thread/start") {
+        const thread = createThread();
+        threads.set(thread.id, thread);
+        reply({
+          id: request.id,
+          result: {
+            thread: serializeThread(thread, true),
+            model: "gpt-5.3-codex",
+            modelProvider: "fake",
+            cwd: thread.cwd,
+            approvalPolicy: "never",
+          },
+        });
+        notify("thread/started", { thread: serializeThread(thread, true) });
+        continue;
+      }
+
+      if (method === "turn/start") {
+        const threadId = String(params.threadId ?? "");
+        const thread = threads.get(threadId);
+        if (!thread) {
+          reply({
+            id: request.id,
+            error: { code: "execution", message: `thread not found: ${threadId}` },
+          });
+          continue;
+        }
+
+        const inputItems = Array.isArray(params.input) ? params.input : [];
+        const prompt = extractPrompt(inputItems);
+        const turn = {
+          id: nextTurnId(),
+          status: "inProgress",
+          error: null,
+          items: [],
+          prompt,
+        };
+        thread.turns.push(turn);
+        thread.status = "active";
+
+        reply({
+          id: request.id,
+          result: {
+            turn: {
+              id: turn.id,
+              items: [],
+              status: "inProgress",
+              error: null,
+            },
+          },
+        });
+
+        notify("thread/status/changed", {
+          threadId: thread.id,
+          status: { type: "active", activeFlags: [] },
+        });
+        notify("turn/started", {
+          threadId: thread.id,
+          turn: { id: turn.id, items: [], status: "inProgress", error: null },
+        });
+
+        setTimeout(() => {
+          if (turn.status === "interrupted") {
+            return;
+          }
+
+          const outputText = `app:${prompt}`;
+          turn.status = "completed";
+          turn.items = [
+            {
+              type: "userMessage",
+              id: `item-user-${turn.id}`,
+              content: [{ type: "text", text: prompt, text_elements: [] }],
+            },
+            {
+              type: "agentMessage",
+              id: `item-agent-${turn.id}`,
+              text: outputText,
+              phase: "final_answer",
+              memoryCitation: null,
+            },
+          ];
+          thread.status = "idle";
+
+          notify("item/completed", {
+            threadId: thread.id,
+            turnId: turn.id,
+            item: turn.items[1],
+          });
+          notify("thread/status/changed", {
+            threadId: thread.id,
+            status: { type: "idle" },
+          });
+          notify("turn/completed", {
+            threadId: thread.id,
+            turn: { id: turn.id, items: [], status: "completed", error: null },
+          });
+        }, 20);
+
+        continue;
+      }
+
+      if (method === "thread/read") {
+        const threadId = String(params.threadId ?? "");
+        const thread = threads.get(threadId);
+        if (!thread) {
+          reply({
+            id: request.id,
+            error: { code: "execution", message: `thread not found: ${threadId}` },
+          });
+          continue;
+        }
+
+        const includeTurns = Boolean(params.includeTurns);
+        reply({
+          id: request.id,
+          result: {
+            thread: serializeThread(thread, includeTurns),
+          },
+        });
+        continue;
+      }
+
+      if (method === "turn/interrupt") {
+        const threadId = String(params.threadId ?? "");
+        const turnId = String(params.turnId ?? "");
+        const thread = threads.get(threadId);
+        const turn = thread?.turns.find((item) => item.id === turnId);
+        if (!thread || !turn) {
+          reply({
+            id: request.id,
+            error: { code: "execution", message: "turn not found" },
+          });
+          continue;
+        }
+
+        turn.status = "interrupted";
+        thread.status = "idle";
+        reply({ id: request.id, result: {} });
+        notify("thread/status/changed", {
+          threadId: thread.id,
+          status: { type: "idle" },
+        });
+        notify("turn/completed", {
+          threadId: thread.id,
+          turn: { id: turn.id, items: [], status: "interrupted", error: null },
+        });
+        continue;
+      }
+
+      reply({
+        id: request.id,
+        error: {
+          code: "execution",
+          message: `unsupported method: ${String(method)}`,
+        },
+      });
     }
   });
+}
+
+function createThread() {
+  const id = `thread-${Date.now()}-${threadSeq++}`;
+  return {
+    id,
+    preview: "",
+    createdAt: Math.floor(Date.now() / 1000),
+    updatedAt: Math.floor(Date.now() / 1000),
+    cwd: process.cwd(),
+    turns: [],
+    status: "idle",
+  };
+}
+
+function nextTurnId() {
+  return `turn-${Date.now()}-${turnSeq++}`;
+}
+
+function serializeThread(thread, includeTurns) {
+  return {
+    id: thread.id,
+    preview: thread.preview,
+    ephemeral: false,
+    modelProvider: "fake",
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    status: { type: thread.status },
+    path: `/tmp/${thread.id}.jsonl`,
+    cwd: thread.cwd,
+    cliVersion: "0.0.1",
+    source: "vscode",
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name: null,
+    turns: includeTurns
+      ? thread.turns.map((turn) => ({
+          id: turn.id,
+          items: turn.items,
+          status: turn.status,
+          error: turn.error,
+        }))
+      : [],
+  };
+}
+
+function extractPrompt(inputItems) {
+  for (const item of inputItems) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    if (item.type !== "text") {
+      continue;
+    }
+
+    if (typeof item.text === "string") {
+      return item.text;
+    }
+  }
+
+  return "";
+}
+
+function reply(payload) {
+  process.stdout.write(`${JSON.stringify(payload)}\n`);
+}
+
+function notify(method, params) {
+  process.stdout.write(`${JSON.stringify({ method, params })}\n`);
 }
 
 if (args[0] === "--version") {
