@@ -46,3 +46,6 @@ prisma/*.db-journal
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local worktrees
+.worktrees/
