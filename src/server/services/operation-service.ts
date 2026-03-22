@@ -86,6 +86,7 @@ export class OperationService {
         threadId: operation.session.threadId,
         workspaceId: operation.session.workspaceId,
         cwd: operation.session.cwd,
+        continuationToken: undefined,
       });
 
       await this.deps.gateway.ensureRunner({
@@ -118,7 +119,10 @@ export class OperationService {
     }
   }
 
-  async requireApproval(operationId: string, input: { kind: string; prompt: string }) {
+  async requireApproval(
+    operationId: string,
+    input: { kind: string; prompt: string; continuationToken?: string },
+  ) {
     await prisma.operation.update({
       where: { id: operationId },
       data: { status: "waitingApproval" },
@@ -149,7 +153,10 @@ export class OperationService {
     }
 
     await this.deps.gateway.ensureRunner({ workspaceId: handle.workspaceId, cwd: handle.cwd });
-    const result = await this.deps.gateway.resumeAfterApproval(input);
+    const result = await this.deps.gateway.resumeAfterApproval({
+      ...input,
+      continuationToken: handle.continuationToken,
+    });
 
     if (!(await this.shouldApplyExecutionResult(input.operationId))) {
       this.deps.registry.delete(input.operationId);
@@ -240,7 +247,9 @@ export class OperationService {
       await this.requireApproval(operationId, {
         kind: result.kind,
         prompt: result.prompt,
+        continuationToken: result.continuationToken,
       });
+      this.deps.registry.setContinuationToken(operationId, result.continuationToken);
       return;
     }
 

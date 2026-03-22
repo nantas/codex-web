@@ -25,6 +25,7 @@ export class MockRunnerGateway implements RunnerGateway {
     operationId: string;
     approvalId: string;
     decision: "approve" | "deny";
+    continuationToken?: string;
   }): Promise<TurnExecutionResult> {
     if (input.decision === "deny") {
       return { status: "failed", errorMessage: "approval denied" };

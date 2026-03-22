@@ -6,7 +6,7 @@ import { getExecutionBackend, type ExecutionBackend } from "@/server/runtime/exe
 export type TurnExecutionResult =
   | { status: "completed"; resultText: string }
   | { status: "failed"; errorMessage: string }
-  | { status: "waitingApproval"; kind: string; prompt: string }
+  | { status: "waitingApproval"; kind: string; prompt: string; continuationToken?: string }
   | { status: "running" };
 
 export type RunnerGateway = {
@@ -24,6 +24,7 @@ export type RunnerGateway = {
     operationId: string;
     approvalId: string;
     decision: "approve" | "deny";
+    continuationToken?: string;
   }): Promise<TurnExecutionResult>;
   interruptTurn(input: { operationId: string }): Promise<void>;
 };

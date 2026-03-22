@@ -94,6 +94,7 @@ export class CodexAppServerGateway implements RunnerGateway {
     operationId: string;
     approvalId: string;
     decision: "approve" | "deny";
+    continuationToken?: string;
   }): Promise<TurnExecutionResult> {
     if (input.decision === "deny") {
       return { status: "failed", errorMessage: "approval denied" };
@@ -105,6 +106,24 @@ export class CodexAppServerGateway implements RunnerGateway {
         status: "failed",
         errorMessage: `missing execution context for operation ${input.operationId}`,
       };
+    }
+
+    const resumedViaAppServer = await this.tryResumeViaAppServer(input);
+    if (resumedViaAppServer) {
+      this.manager.touch(context.workspaceId);
+      return resumedViaAppServer;
+    }
+
+    if (input.continuationToken) {
+      return this.runCodexExec({
+        operationId: input.operationId,
+        workspaceId: context.workspaceId,
+        cwd: context.cwd,
+        prompt: [
+          `Resume operation ${input.operationId} after approval ${input.approvalId}.`,
+          `Continuation token: ${input.continuationToken}`,
+        ].join("\n"),
+      });
     }
 
     return this.runCodexExec({
@@ -147,6 +166,33 @@ export class CodexAppServerGateway implements RunnerGateway {
 
     if (check.code !== 0) {
       throw new Error(check.errorMessage ?? "codex --version failed");
+    }
+  }
+
+  private async tryResumeViaAppServer(input: {
+    operationId: string;
+    approvalId: string;
+    decision: "approve" | "deny";
+    continuationToken?: string;
+  }): Promise<TurnExecutionResult | null> {
+    if (!input.continuationToken) {
+      return null;
+    }
+
+    if (!(await this.appServerClient.isAvailable())) {
+      return null;
+    }
+
+    try {
+      const event = await this.appServerClient.resumeAfterApproval({
+        operationId: input.operationId,
+        approvalId: input.approvalId,
+        decision: input.decision,
+        continuationToken: input.continuationToken,
+      });
+      return mapAppServerEventToResult(event);
+    } catch {
+      return null;
     }
   }
 
@@ -326,6 +372,7 @@ function mapAppServerEventToResult(event: AppServerTurnEvent): TurnExecutionResu
       status: "waitingApproval",
       kind: event.kind,
       prompt: event.prompt,
+      continuationToken: event.continuationToken,
     };
   }
 

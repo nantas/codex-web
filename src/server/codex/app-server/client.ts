@@ -13,9 +13,17 @@ export type AppServerTurnInput = {
   text: string;
 };
 
+export type AppServerResumeInput = {
+  operationId: string;
+  approvalId: string;
+  decision: "approve" | "deny";
+  continuationToken: string;
+};
+
 export type AppServerClient = {
   isAvailable(): Promise<boolean>;
   startTurn(input: AppServerTurnInput): Promise<AppServerTurnEvent>;
+  resumeAfterApproval(input: AppServerResumeInput): Promise<AppServerTurnEvent>;
 };
 
 export class NoopAppServerClient implements AppServerClient {
@@ -24,6 +32,10 @@ export class NoopAppServerClient implements AppServerClient {
   }
 
   async startTurn(_input: AppServerTurnInput): Promise<AppServerTurnEvent> {
+    throw new Error("app-server unavailable");
+  }
+
+  async resumeAfterApproval(_input: AppServerResumeInput): Promise<AppServerTurnEvent> {
     throw new Error("app-server unavailable");
   }
 }

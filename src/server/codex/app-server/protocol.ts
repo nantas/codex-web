@@ -9,6 +9,7 @@ export type AppServerTurnApprovalRequiredEvent = {
   type: "turn.approval_required";
   kind: string;
   prompt: string;
+  continuationToken?: string;
 };
 
 export type AppServerTurnRunningEvent = {

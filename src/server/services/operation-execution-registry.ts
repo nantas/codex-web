@@ -4,6 +4,7 @@ export type OperationExecutionHandle = {
   workspaceId: string;
   cwd: string;
   threadId: string;
+  continuationToken?: string;
 };
 
 export class OperationExecutionRegistry {
@@ -11,6 +12,15 @@ export class OperationExecutionRegistry {
 
   set(entry: OperationExecutionHandle) {
     this.byOperation.set(entry.operationId, entry);
+  }
+
+  setContinuationToken(operationId: string, continuationToken: string | undefined) {
+    const existing = this.byOperation.get(operationId);
+    if (!existing) {
+      return;
+    }
+
+    existing.continuationToken = continuationToken;
   }
 
   get(operationId: string) {
