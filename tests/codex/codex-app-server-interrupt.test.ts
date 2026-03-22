@@ -7,6 +7,7 @@ describe("codex app-server interrupt", () => {
     const gateway = new CodexAppServerGateway({
       appServerClient: {
         isAvailable: async () => true,
+        ensureProcess: async () => ({ id: "proc-1", endpoint: "stdio://test", pid: 111 }),
         startTurn: async () => ({ id: "turn-1", type: "turn.running" }),
         resumeAfterApproval: async () => ({ id: "turn-2", type: "turn.running" }),
         interruptTurn,
@@ -27,6 +28,7 @@ describe("codex app-server interrupt", () => {
     expect(interruptTurn).toHaveBeenCalledWith({
       operationId: "op-1",
       workspaceId: "ws-1",
+      cwd: "/tmp/ws-1",
       turnId: "turn-1",
     });
   });
@@ -37,6 +39,7 @@ describe("codex app-server interrupt", () => {
       const gateway = new CodexAppServerGateway({
         appServerClient: {
           isAvailable: async () => true,
+          ensureProcess: async () => ({ id: "proc-2", endpoint: "stdio://test", pid: 222 }),
           startTurn: async () => ({ id: "turn-2", type: "turn.running" }),
           resumeAfterApproval: async () => ({ id: "turn-3", type: "turn.running" }),
           interruptTurn: async () => {
@@ -48,10 +51,14 @@ describe("codex app-server interrupt", () => {
       const kill = vi.fn();
       const anyGateway = gateway as unknown as {
         activeExecutions: Map<string, { child: { kill: (signal: string) => void }; workspaceId: string; interrupted: boolean }>;
-        activeAppServerTurns: Map<string, { workspaceId: string; turnId: string }>;
+        activeAppServerTurns: Map<string, { workspaceId: string; cwd: string; turnId: string }>;
       };
 
-      anyGateway.activeAppServerTurns.set("op-2", { workspaceId: "ws-2", turnId: "turn-2" });
+      anyGateway.activeAppServerTurns.set("op-2", {
+        workspaceId: "ws-2",
+        cwd: "/tmp/ws-2",
+        turnId: "turn-2",
+      });
       anyGateway.activeExecutions.set("op-2", {
         child: { kill },
         workspaceId: "ws-2",
