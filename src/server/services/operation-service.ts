@@ -76,6 +76,10 @@ export class OperationService {
         return;
       }
 
+      if (!isExecutionActiveStatus(operation.status)) {
+        return;
+      }
+
       this.deps.registry.set({
         operationId: operation.id,
         sessionId: operation.sessionId,
@@ -95,6 +99,11 @@ export class OperationService {
         threadId: operation.session.threadId,
         text: operation.requestText,
       });
+
+      if (!(await this.shouldApplyExecutionResult(operation.id))) {
+        this.deps.registry.delete(operation.id);
+        return;
+      }
 
       await this.applyTurnResult(operation.id, result);
 
@@ -140,6 +149,11 @@ export class OperationService {
     await this.deps.gateway.ensureRunner({ workspaceId: handle.workspaceId, cwd: handle.cwd });
     const result = await this.deps.gateway.resumeAfterApproval(input);
 
+    if (!(await this.shouldApplyExecutionResult(input.operationId))) {
+      this.deps.registry.delete(input.operationId);
+      return;
+    }
+
     await this.applyTurnResult(input.operationId, result);
 
     if (result.status !== "running" && result.status !== "waitingApproval") {
@@ -148,8 +162,27 @@ export class OperationService {
   }
 
   async interruptExecution(operationId: string) {
+    const operation = await prisma.operation.findUnique({ where: { id: operationId } });
+    if (!operation) {
+      return null;
+    }
+
+    if (isExecutionTerminalStatus(operation.status)) {
+      this.deps.registry.delete(operationId);
+      return operation;
+    }
+
     await this.deps.gateway.interruptTurn({ operationId });
+    const updated = await prisma.operation.update({
+      where: { id: operationId },
+      data: { status: "interrupted" },
+    });
+    await this.deps.operationLogs.append(updated.id, {
+      level: "error",
+      message: "operation interrupted",
+    });
     this.deps.registry.delete(operationId);
+    return updated;
   }
 
   async getById(operationId: string) {
@@ -225,6 +258,18 @@ export class OperationService {
       message: `operation failed: ${errorMessage}`,
     });
   }
+
+  private async shouldApplyExecutionResult(operationId: string) {
+    const current = await prisma.operation.findUnique({
+      where: { id: operationId },
+      select: { status: true },
+    });
+    if (!current) {
+      return false;
+    }
+
+    return !isExecutionTerminalStatus(current.status);
+  }
 }
 
 function toErrorMessage(error: unknown) {
@@ -233,4 +278,12 @@ function toErrorMessage(error: unknown) {
   }
 
   return "unknown execution error";
+}
+
+function isExecutionActiveStatus(status: string) {
+  return status === "running" || status === "waitingApproval";
+}
+
+function isExecutionTerminalStatus(status: string) {
+  return status === "completed" || status === "failed" || status === "interrupted";
 }

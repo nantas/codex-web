@@ -1,6 +1,6 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第十六批已完成）
+更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第十七批已完成）
 
 ## 1. 总体状态
 
@@ -34,6 +34,9 @@
   - 第十六批（本次完成）：升级 `RunnerManager` 运行时元数据（workspace/cwd/endpoint/pid/status/lastSeenAt），新增 `OperationExecutionRegistry`，`OperationService` 接入异步执行编排（`startExecution -> dispatchExecution`）。
   - 第十六批（本次完成）：`POST /api/v1/operations` 改为异步执行路径；审批 `approve` 分支接线 `resumeAfterApproval`；中断路由接线 `interruptExecution`。
   - 第十六批（本次完成）：新增 codex app-server integration guard 测试（`RUN_CODEX_INTEGRATION` 门控，默认 skipped），并更新 README/架构文档说明 codex 预检与回退策略。
+  - 第十七批（本次完成）：修复 interrupt 竞态问题，避免终态 operation（`completed/failed/interrupted`）被重复中断改写。
+  - 第十七批（本次完成）：执行结果回写前增加终态保护，避免中断后被异步执行结果覆盖状态。
+  - 第十七批（本次完成）：补充中断 API 与执行编排测试（活动态中断、终态幂等、已中断任务跳过 dispatch）。
   - 新增 `pollIntervalMs` 组件参数用于稳定测试与轮询行为控制。
   - 新增 `session-detail-url-state` 解析/序列化工具，统一 URL 状态处理逻辑。
   - `OperationLogService.list` 新增 `level/time-range` 过滤能力，与 cursor 查询可组合使用。
@@ -57,11 +60,18 @@
   - 第十六批新增测试通过：`tests/runtime/execution-config.test.ts`、`tests/codex/runner-gateway.test.ts`、`tests/services/operation-execution.service.test.ts`、`tests/api/operation-interrupt.route.test.ts`。
   - 第十六批集成守卫：`tests/codex/codex-app-server-gateway.integration.test.ts` 默认 skipped（未设置 `RUN_CODEX_INTEGRATION`）。
   - 第十六批全量验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test`（24 passed, 1 skipped）、`pnpm test:e2e`（1 passed）。
+  - 第十七批验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test -- tests/api/operation-interrupt.route.test.ts tests/services/operation-execution.service.test.ts`（52 passed, 1 skipped）。
 - 后续待办：
   - 按实施计划进入真实执行链路编码阶段（Protocol Spike -> startTurn -> approval/interruption）。
   - 增加 operation 历史筛选与搜索能力。
   - 增加日志失败提示的本地化时间展示与用户时区格式切换。
   - 补充 codex app-server 协议细节（线程恢复、审批事件映射、日志回写）并将 integration test 从 guard 模式推进到可稳定执行。
+  - 真实后端人工验证准备（Codex）：
+    - 完成 `CodexAppServerGateway` 真实协议调用（runner 启动、turn 执行、审批恢复、中断）。
+    - 打通 `RunnerManager` 运行时字段回写（`endpoint/pid/status/lastSeenAt`）并补充故障状态迁移。
+    - 在 `OperationService` 中接入真实执行结果事件回写（`completed/failed/waitingApproval`）与日志落库一致性校验。
+    - 将 `tests/codex/codex-app-server-gateway.integration.test.ts` 从 guard 模式推进到可在本机稳定执行的手动集成验证。
+    - 输出并执行真实后端人工验证清单：`/api/health`、登录、提交操作、审批恢复、interrupt、日志可见性、本地/远程可达性。
 
 ## 3. 里程碑完成情况
 
@@ -141,6 +151,7 @@
 ## 8. 建议下一阶段（P1）
 
 1. 接入真实执行通道与任务日志回传
-2. 完成自动增量拉取下的前端缓存策略与可观测性增强（含 URL 状态同步）
-3. 增加 OAuth 与关键 API 的失败场景自动化测试
-4. 增加部署文档（systemd/pm2 + reverse proxy + TLS）
+2. 完成真实后端人工验证闭环（Codex app-server 协议 + 手动验证清单执行）
+3. 完成自动增量拉取下的前端缓存策略与可观测性增强（含 URL 状态同步）
+4. 增加 OAuth 与关键 API 的失败场景自动化测试
+5. 增加部署文档（systemd/pm2 + reverse proxy + TLS）

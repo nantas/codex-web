@@ -121,6 +121,7 @@
 1. 默认 `EXECUTION_BACKEND=mock`，保证本地与测试稳定。
 2. 显式设置 `EXECUTION_BACKEND=codex` 时，启用 codex app-server gateway。
 3. codex backend 不可用或协议不稳定时，可直接回退到 `mock`。
+4. 中断仅对活动态 operation 生效；已终态 operation 保持原状态，避免竞态改写。
 
 ## 5. 安全与网络设计
 
@@ -138,6 +139,7 @@
 ## 7. 后续演进方向
 
 - 接入真实 Codex CLI 执行通道
+- 完成真实后端人工验证闭环（runner 启动/执行/审批恢复/中断/日志回写）
 - 会话页增加结构化日志过滤与搜索能力
 - 权限模型细化（多用户/多租户）
 - 持久化升级与备份策略

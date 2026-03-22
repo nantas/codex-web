@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
+import type { RunnerGateway } from "@/server/codex/runner-gateway";
 import { createOperationServiceForTest } from "@/server/services/operation-service";
 
 describe("operation execution orchestration", () => {
@@ -36,6 +37,61 @@ describe("operation execution orchestration", () => {
 
     const refreshed = await prisma.operation.findUnique({ where: { id: op.id } });
     expect(refreshed?.status).toBe("running");
+
+    await prisma.$disconnect();
+  });
+
+  it("skips dispatch when operation is already interrupted", async () => {
+    const prisma = new PrismaClient();
+    await prisma.approval.deleteMany();
+    await prisma.operationLog.deleteMany();
+    await prisma.operation.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.user.deleteMany();
+
+    await prisma.user.create({
+      data: { id: "usr_exec_2", githubId: "5002", email: "exec2@example.com", name: "Exec User 2" },
+    });
+
+    await prisma.session.create({
+      data: {
+        id: "ses_exec_2",
+        userId: "usr_exec_2",
+        workspaceId: "ws-exec-2",
+        cwd: "/tmp/ws-exec-2",
+        threadId: "thr_exec_2",
+        status: "idle",
+      },
+    });
+
+    const op = await prisma.operation.create({
+      data: {
+        id: "op_exec_2",
+        sessionId: "ses_exec_2",
+        status: "interrupted",
+        requestText: "echo skipped",
+      },
+    });
+
+    const gateway: RunnerGateway = {
+      backend: "mock",
+      ensureRunner: vi.fn(async () => {}),
+      startTurn: vi.fn(async () => ({ status: "completed" as const, resultText: "should not run" })),
+      resumeAfterApproval: vi.fn(async () => ({
+        status: "completed" as const,
+        resultText: "should not run",
+      })),
+      interruptTurn: vi.fn(async () => {}),
+    };
+
+    const service = createOperationServiceForTest({ gateway });
+    await service.dispatchExecution(op.id);
+
+    expect(gateway.ensureRunner).not.toHaveBeenCalled();
+    expect(gateway.startTurn).not.toHaveBeenCalled();
+
+    const refreshed = await prisma.operation.findUnique({ where: { id: op.id } });
+    expect(refreshed?.status).toBe("interrupted");
 
     await prisma.$disconnect();
   });
