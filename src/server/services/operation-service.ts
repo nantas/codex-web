@@ -86,6 +86,7 @@ export class OperationService {
         threadId: operation.session.threadId,
         workspaceId: operation.session.workspaceId,
         cwd: operation.session.cwd,
+        text: operation.requestText,
         continuationToken: undefined,
       });
 
@@ -158,6 +159,11 @@ export class OperationService {
     const result = await this.deps.gateway.resumeAfterApproval({
       ...input,
       continuationToken: handle.continuationToken,
+      workspaceId: handle.workspaceId,
+      cwd: handle.cwd,
+      sessionId: handle.sessionId,
+      threadId: handle.threadId,
+      text: handle.text,
     });
 
     if (!(await this.shouldApplyExecutionResult(input.operationId))) {
@@ -221,6 +227,7 @@ export class OperationService {
       threadId: operation.session.threadId,
       workspaceId: operation.session.workspaceId,
       cwd: operation.session.cwd,
+      text: operation.requestText,
     };
 
     this.deps.registry.set(handle);

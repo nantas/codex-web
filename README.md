@@ -109,7 +109,7 @@ NEXTAUTH_SECRET=dev-secret DATABASE_URL="file:./dev.db" EXECUTION_BACKEND=mock p
 
 Then:
 
-1. Create a session: `curl -s -X POST http://127.0.0.1:43173/api/v1/sessions -H 'content-type: application/json' -d '{"workspaceId":"ws-manual","cwd":"/tmp/ws-manual"}'`
+1. Create a session: `curl -s -X POST http://localhost:43173/api/v1/sessions -H 'content-type: application/json' -d '{"workspaceId":"ws-manual","cwd":"/tmp/ws-manual"}'`
 2. Open `/sessions/<sessionId>` from response payload.
 3. In `Send Turn`, input text and click `Send`.
 4. Confirm new operation appears in history and status progresses (`running -> completed` in mock).
@@ -123,10 +123,12 @@ NEXTAUTH_SECRET=dev-secret EXECUTION_BACKEND=codex DATABASE_URL="file:./dev.db" 
 
 Then:
 
-1. `curl -s -X POST http://127.0.0.1:43173/api/v1/sessions -H 'content-type: application/json' -H 'x-github-id: dev-manual' -d '{"workspaceId":"ws-real","cwd":"<ABS_WORKSPACE_PATH>"}'`
-2. `curl -s -X POST http://127.0.0.1:43173/api/v1/operations -H 'content-type: application/json' -H 'x-github-id: dev-manual' -d '{"sessionId":"<sessionId>","type":"turn.start","input":[{"type":"text","text":"Reply with exactly: MANUAL_OK"}]}'`
+1. `curl -s -X POST http://localhost:43173/api/v1/sessions -H 'content-type: application/json' -H 'x-github-id: dev-manual' -d '{"workspaceId":"ws-real","cwd":"<ABS_WORKSPACE_PATH>"}'`
+2. `curl -s -X POST http://localhost:43173/api/v1/operations -H 'content-type: application/json' -H 'x-github-id: dev-manual' -d '{"sessionId":"<sessionId>","type":"turn.start","input":[{"type":"text","text":"Reply with exactly: MANUAL_OK"}]}'`
 3. Poll `GET /api/v1/operations/<operationId>` until terminal status and confirm `resultText`.
 4. Open `http://localhost:43173/sessions/<sessionId>` and validate `Send Turn` end-to-end in page.
+
+Note (Next.js 16 dev mode): prefer `localhost` over `127.0.0.1` for manual web verification to avoid dev-resource cross-origin restrictions affecting HMR/hydration.
 
 ## Start OAuth Sign-In
 

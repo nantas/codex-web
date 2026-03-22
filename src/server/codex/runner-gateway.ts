@@ -25,6 +25,11 @@ export type RunnerGateway = {
     approvalId: string;
     decision: "approve" | "deny";
     continuationToken?: string;
+    workspaceId?: string;
+    cwd?: string;
+    sessionId?: string;
+    threadId?: string;
+    text?: string;
   }): Promise<TurnExecutionResult>;
   interruptTurn(input: { operationId: string }): Promise<void>;
 };

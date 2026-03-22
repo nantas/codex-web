@@ -201,6 +201,7 @@ describe("operation execution orchestration", () => {
       workspaceId: "ws-exec-4",
       cwd: "/tmp/ws-exec-4",
       threadId: "thr_exec_4",
+      text: "resume me",
       continuationToken: "cont-token-4",
     });
 
@@ -216,6 +217,77 @@ describe("operation execution orchestration", () => {
       approvalId: "apr_exec_4",
       decision: "approve",
       continuationToken: "cont-token-4",
+      workspaceId: "ws-exec-4",
+      cwd: "/tmp/ws-exec-4",
+      sessionId: "ses_exec_4",
+      threadId: "thr_exec_4",
+      text: "resume me",
+    });
+
+    await prisma.$disconnect();
+  });
+
+  it("resumeAfterApproval rebuilds context from database when registry is empty", async () => {
+    const prisma = new PrismaClient();
+    await prisma.approval.deleteMany();
+    await prisma.operationLog.deleteMany();
+    await prisma.operation.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.user.deleteMany();
+
+    await prisma.user.create({
+      data: { id: "usr_exec_5", githubId: "5005", email: "exec5@example.com", name: "Exec User 5" },
+    });
+
+    await prisma.session.create({
+      data: {
+        id: "ses_exec_5",
+        userId: "usr_exec_5",
+        workspaceId: "ws-exec-5",
+        cwd: "/tmp/ws-exec-5",
+        threadId: "thr_exec_5",
+        status: "idle",
+      },
+    });
+
+    await prisma.operation.create({
+      data: {
+        id: "op_exec_5",
+        sessionId: "ses_exec_5",
+        status: "waitingApproval",
+        requestText: "resume from db context",
+      },
+    });
+
+    const gateway: RunnerGateway = {
+      backend: "mock",
+      ensureRunner: vi.fn(async () => {}),
+      startTurn: vi.fn(async () => ({ status: "running" as const })),
+      resumeAfterApproval: vi.fn(async () => ({
+        status: "completed" as const,
+        resultText: "resumed from db context",
+      })),
+      interruptTurn: vi.fn(async () => {}),
+    };
+
+    const registry = new OperationExecutionRegistry();
+    const service = createOperationServiceForTest({ gateway, registry });
+    await service.resumeAfterApproval({
+      operationId: "op_exec_5",
+      approvalId: "apr_exec_5",
+      decision: "approve",
+    });
+
+    expect(gateway.resumeAfterApproval).toHaveBeenCalledWith({
+      operationId: "op_exec_5",
+      approvalId: "apr_exec_5",
+      decision: "approve",
+      continuationToken: undefined,
+      workspaceId: "ws-exec-5",
+      cwd: "/tmp/ws-exec-5",
+      sessionId: "ses_exec_5",
+      threadId: "thr_exec_5",
+      text: "resume from db context",
     });
 
     await prisma.$disconnect();

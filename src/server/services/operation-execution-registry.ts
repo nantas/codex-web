@@ -4,6 +4,7 @@ export type OperationExecutionHandle = {
   workspaceId: string;
   cwd: string;
   threadId: string;
+  text?: string;
   continuationToken?: string;
 };
 

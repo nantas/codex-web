@@ -113,12 +113,23 @@ export class CodexAppServerGateway implements RunnerGateway {
     approvalId: string;
     decision: "approve" | "deny";
     continuationToken?: string;
+    workspaceId?: string;
+    cwd?: string;
+    sessionId?: string;
+    threadId?: string;
+    text?: string;
   }): Promise<TurnExecutionResult> {
     if (input.decision === "deny") {
       return { status: "failed", errorMessage: "approval denied" };
     }
 
-    const context = this.operationContexts.get(input.operationId);
+    const context =
+      this.operationContexts.get(input.operationId) ??
+      buildOperationContextFromResumeInput(input);
+    if (context) {
+      this.operationContexts.set(input.operationId, context);
+    }
+
     if (!context) {
       return {
         status: "failed",
@@ -533,4 +544,30 @@ function toErrorMessage(error: unknown) {
 
 function sanitizeErrorText(input: string) {
   return input.replace(/\s+/g, " ").trim().slice(0, 800);
+}
+
+function buildOperationContextFromResumeInput(input: {
+  workspaceId?: string;
+  cwd?: string;
+  sessionId?: string;
+  threadId?: string;
+  text?: string;
+}) {
+  if (
+    typeof input.workspaceId !== "string" ||
+    typeof input.cwd !== "string" ||
+    typeof input.sessionId !== "string" ||
+    typeof input.threadId !== "string" ||
+    typeof input.text !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    workspaceId: input.workspaceId,
+    cwd: input.cwd,
+    sessionId: input.sessionId,
+    threadId: input.threadId,
+    text: input.text,
+  } satisfies OperationContext;
 }

@@ -67,6 +67,7 @@ Alternative terminal states: `failed`, `interrupted`.
 - codex runtime command can be overridden via `CODEX_BIN` (default `codex`).
 - `POST /api/v1/operations` returns `202` quickly after `startExecution`, then `OperationService.dispatchExecution` continues asynchronously.
 - Approval resume threads `continuationToken` from gateway result -> execution registry -> resume call.
+- Approval resume also carries operation context (`workspace/cwd/session/thread/text`) from service to gateway, so resume is robust across dev hot-reload or gateway in-memory reset.
 - Interrupt uses protocol-first path (`app-server interrupt`) and falls back to process signals (`SIGINT` -> `SIGKILL`).
 - app-server fallback policy is strict: only `unavailable` errors fallback to `codex exec`; protocol/execution/timeout errors are surfaced with classified failure text.
 - app-server adapter now speaks real codex methods (`initialize`, `thread/start`, `turn/start`, `thread/read`, `turn/interrupt`) and keeps legacy `turn.start`/`turn.resume`/`turn.interrupt` fallback for compatibility.
