@@ -37,4 +37,16 @@ describe("RunnerManager", () => {
     manager.markFailed("ws-2");
     expect(manager.get("ws-2")?.status).toBe("failed");
   });
+
+  it("binds process metadata for an existing runtime", async () => {
+    const manager = new RunnerManager();
+    await manager.getOrCreate("ws-3", { cwd: "/tmp/ws-3" });
+
+    manager.bindProcessMeta("ws-3", { endpoint: "codex://app-server", pid: 456 });
+    const runtime = manager.get("ws-3");
+
+    expect(runtime?.endpoint).toBe("codex://app-server");
+    expect(runtime?.pid).toBe(456);
+    expect(runtime?.lastSeenAt).toBeTruthy();
+  });
 });
