@@ -8,6 +8,25 @@
 - `src/server/http/*`: route-level auth and error mapping helpers.
 - `src/app/api/v1/*`: HTTP API surface used by frontend polling.
 
+Session query endpoints used by web pages:
+
+- `GET /api/v1/sessions`: list sessions + latest operation + pending approval count
+- `GET /api/v1/sessions/:sessionId`: return session detail with operations and approvals
+- `GET /api/v1/operations/:operationId/logs`: fetch operation logs with cursor (`after`), `limit`, `level`, `from`, and `to`
+
+Current web polling behavior:
+
+- `/sessions`: client polls `GET /api/v1/sessions` periodically to refresh list state
+- `/sessions/:sessionId`: client polls `GET /api/v1/sessions/:sessionId` periodically to refresh detail state
+- pending approvals can be decided in-page via `POST /api/v1/approvals/:approvalId/decision`, then detail is refreshed
+- session detail page renders operation history timeline with client-side paging
+- operation logs are persisted in SQLite (`OperationLog`) and attached to operation detail/time-line rendering
+- session detail page can trigger logs API re-fetch with `level/from/to` filters for visible operations
+- session detail page tracks per-operation log cursor and supports incremental `Load New Logs`
+- when filters are active, periodic polling switches to incremental logs fetch (cursor-based) instead of full detail refresh
+- incremental polling applies retry backoff on failure (exponential growth capped at 30s, retry delay adds 0~25% jitter, reset after success)
+- session detail UI exposes polling observability (filter state, retry count, next delay, per-operation cursor)
+
 ## Operation Status Lifecycle
 
 Canonical statuses:
@@ -50,5 +69,6 @@ SQLite via Prisma stores control-plane data:
 - `Session`
 - `Operation`
 - `Approval`
+- `OperationLog`
 
 This keeps state consistent across API polling requests in the MVP scope.

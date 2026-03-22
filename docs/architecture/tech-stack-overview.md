@@ -35,6 +35,7 @@
 - `Session`
 - `Operation`
 - `Approval`
+- `OperationLog`
 
 用途：
 

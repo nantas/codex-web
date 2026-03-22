@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db/prisma";
 import { HttpError, toErrorResponse } from "@/server/http/errors";
+import { OperationLogService } from "@/server/services/operation-log-service";
+
+const operationLogService = new OperationLogService();
 
 export async function GET(
   _req: Request,
@@ -23,6 +26,7 @@ export async function GET(
       resultText: operation.resultText,
       errorMessage: operation.errorMessage,
       approvals: operation.approvals,
+      logs: await operationLogService.listRecent(operation.id),
     });
   } catch (error) {
     return toErrorResponse(error);

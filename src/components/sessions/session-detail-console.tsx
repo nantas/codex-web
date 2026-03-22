@@ -9,8 +9,17 @@ type Operation = {
 export default function SessionDetailConsole({
   initialOperation,
 }: {
-  initialOperation: Operation;
+  initialOperation: Operation | null;
 }) {
+  if (!initialOperation) {
+    return (
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Session Console</h2>
+        <p className="text-sm text-black/60">No operations yet.</p>
+      </section>
+    );
+  }
+
   const waiting = initialOperation.status === "waitingApproval";
 
   return (

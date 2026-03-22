@@ -8,6 +8,15 @@ import { HttpError, toErrorResponse } from "@/server/http/errors";
 
 const sessionService = new SessionService();
 
+export async function GET() {
+  try {
+    const sessions = await sessionService.listForConsole();
+    return NextResponse.json({ sessions });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const parsed = createSessionRequestSchema.safeParse(await req.json());

@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { approvalDecisionRequestSchema } from "@/server/contracts/api";
 import { prisma } from "@/server/db/prisma";
 import { HttpError, toErrorResponse } from "@/server/http/errors";
+import { OperationLogService } from "@/server/services/operation-log-service";
+
+const operationLogService = new OperationLogService();
 
 export async function POST(
   req: Request,
@@ -26,6 +29,13 @@ export async function POST(
     await prisma.operation.update({
       where: { id: approval.operationId },
       data: { status: parsed.data.decision === "approve" ? "running" : "failed" },
+    });
+    await operationLogService.append(approval.operationId, {
+      level: parsed.data.decision === "approve" ? "info" : "error",
+      message:
+        parsed.data.decision === "approve"
+          ? `approval ${approval.id} approved`
+          : `approval ${approval.id} denied`,
     });
 
     return NextResponse.json({ approvalId: approval.id, status: approval.status });

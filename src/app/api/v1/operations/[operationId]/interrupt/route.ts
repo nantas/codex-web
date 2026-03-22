@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db/prisma";
 import { HttpError, toErrorResponse } from "@/server/http/errors";
+import { OperationLogService } from "@/server/services/operation-log-service";
+
+const operationLogService = new OperationLogService();
 
 export async function POST(
   _req: Request,
@@ -11,6 +14,10 @@ export async function POST(
     const operation = await prisma.operation.update({
       where: { id: operationId },
       data: { status: "interrupted" },
+    });
+    await operationLogService.append(operation.id, {
+      level: "error",
+      message: "operation interrupted",
     });
 
     return NextResponse.json({ operationId: operation.id, status: operation.status });

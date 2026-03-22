@@ -6,6 +6,8 @@ Minimal self-hosted control console with:
 - Session and operation APIs
 - HTTP polling operation status
 - Approval decision endpoint
+- Real session list/detail pages backed by database data
+- Client-side polling refresh and in-page approval actions
 
 ## Quick Start (Host)
 
@@ -43,6 +45,17 @@ From another machine in the same tailnet:
 
 - `http://<YOUR_TAILSCALE_HOST>:43173/sessions`
 - `http://<YOUR_TAILSCALE_HOST>:43173/api/health`
+
+`/sessions` renders real session records and auto-refreshes by polling.
+`/sessions/[sessionId]` shows live detail, pending approvals, and supports in-page `approve/deny` decisions.
+`/sessions/[sessionId]` also includes operation history timeline with paging.
+operation history cards include log lines persisted in SQLite (`OperationLog`) and retained across restarts.
+`/api/v1/operations/:operationId/logs` supports `after/limit/level/from/to` query params for incremental log fetching.
+session detail now provides log filter controls (`level/from/to`) that call the logs API for visible history items.
+after applying filter, `Load New Logs` uses cursor-based incremental fetch (`after=<lastCursor>`) instead of full reload.
+when filter is active, background polling also follows cursor-based incremental log loading.
+auto incremental polling now uses retry backoff with jitter on failures (exponential growth up to 30s, plus 0~25% jitter on retries, reset on success).
+session detail exposes a log polling status panel (filter active, retry count, next delay, per-operation cursor).
 
 ## Start OAuth Sign-In
 
