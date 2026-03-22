@@ -123,8 +123,9 @@
 2. 显式设置 `EXECUTION_BACKEND=codex` 时，启用真实后端（workspace 常驻 `app-server` 优先，`codex exec` 回退）。
 3. `app-server` 仅在 `unavailable` 错误时回退 `exec`；协议/执行/超时错误会以分类失败信息直接返回，避免静默降级掩盖问题。
 4. app-server 适配层已对齐真实 codex 协议方法（`initialize`/`thread/start`/`turn/start`/`thread/read`/`turn/interrupt`），并保留 legacy dot-method 兼容。
-5. codex backend 不可用或行为不稳定时，可通过环境变量快速回退到 `mock`。
-6. 中断仅对活动态 operation 生效；已终态 operation 保持原状态，避免竞态改写。
+5. modern 审批触发通过 `item/commandExecution/requestApproval` 事件映射；如事件未及时可见，则以 `thread.status.activeFlags=waitingOnApproval` 兜底识别。
+6. codex backend 不可用或行为不稳定时，可通过环境变量快速回退到 `mock`。
+7. 中断仅对活动态 operation 生效；已终态 operation 保持原状态，避免竞态改写。
 
 ## 5. 安全与网络设计
 

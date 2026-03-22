@@ -23,6 +23,15 @@ type ModernTurn = {
   status: string;
   error?: unknown;
   items?: unknown;
+  approvalKind?: string;
+  approvalPrompt?: string;
+  continuationToken?: string;
+};
+
+type ModernApprovalNotification = {
+  kind: string;
+  prompt: string;
+  continuationToken?: string;
 };
 
 export class CodexCliAppServerClient implements AppServerClient {
@@ -255,6 +264,13 @@ export class CodexCliAppServerClient implements AppServerClient {
     timeoutMs: number;
   }): Promise<ModernTurn> {
     const deadline = Date.now() + input.timeoutMs;
+    const approvalNotificationPromise = this.waitForModernApprovalNotification({
+      workspaceId: input.workspaceId,
+      cwd: input.cwd,
+      threadId: input.threadId,
+      turnId: input.turnId,
+      timeoutMs: input.timeoutMs,
+    }).catch(() => null);
 
     while (Date.now() <= deadline) {
       const response = await this.processManager.sendRequest({
@@ -267,20 +283,81 @@ export class CodexCliAppServerClient implements AppServerClient {
         },
       });
 
-      const turn = findTurnById(response, input.turnId);
-      if (!turn) {
-        await sleep(TURN_POLL_INTERVAL_MS);
+      const snapshot = findTurnSnapshotById(response, input.turnId);
+      if (!snapshot.turn) {
+        await waitForApprovalOrInterval(approvalNotificationPromise, deadline);
         continue;
       }
 
-      if (!isRunningStatus(turn.status)) {
-        return turn;
+      if (snapshot.waitingOnApproval && isRunningStatus(snapshot.turn.status)) {
+        return {
+          ...snapshot.turn,
+          status: "approval_required",
+          approvalKind: "commandExecution",
+          approvalPrompt: "Codex app-server requires approval to continue.",
+        };
       }
 
-      await sleep(TURN_POLL_INTERVAL_MS);
+      if (!isRunningStatus(snapshot.turn.status)) {
+        return snapshot.turn;
+      }
+
+      const approvalNotification = await waitForApprovalOrInterval(
+        approvalNotificationPromise,
+        deadline,
+      );
+      if (approvalNotification) {
+        return {
+          ...snapshot.turn,
+          status: "approval_required",
+          approvalKind: approvalNotification.kind,
+          approvalPrompt: approvalNotification.prompt,
+          continuationToken: approvalNotification.continuationToken,
+        };
+      }
     }
 
     throw new AppServerClientError("timeout", "waiting for modern app-server turn completion timed out");
+  }
+
+  private async waitForModernApprovalNotification(input: {
+    workspaceId: string;
+    cwd: string;
+    threadId: string;
+    turnId: string;
+    timeoutMs: number;
+  }): Promise<ModernApprovalNotification> {
+    const payload = await this.processManager.waitForNotification({
+      workspaceId: input.workspaceId,
+      cwd: input.cwd,
+      timeoutMs: Math.max(1_000, input.timeoutMs),
+      predicate: (message) => {
+        if (message.method !== "item/commandExecution/requestApproval") {
+          return false;
+        }
+
+        if (!isObjectRecord(message.params)) {
+          return false;
+        }
+
+        return message.params.threadId === input.threadId && message.params.turnId === input.turnId;
+      },
+    });
+
+    const params = isObjectRecord(payload.params) ? payload.params : null;
+    const command = params && typeof params.command === "string" ? params.command : null;
+    const continuationToken =
+      params && typeof params.continuationToken === "string"
+        ? params.continuationToken
+        : undefined;
+
+    return {
+      kind: "commandExecution",
+      prompt: command
+        ? `Codex app-server requests approval to execute: ${command}`
+        : "Codex app-server requires approval to continue.",
+      continuationToken,
+    };
   }
 }
 
@@ -376,14 +453,18 @@ function extractThreadIdFromThreadStart(input: unknown) {
   return id;
 }
 
-function findTurnById(threadReadResult: unknown, turnId: string): ModernTurn | null {
+function findTurnSnapshotById(
+  threadReadResult: unknown,
+  turnId: string,
+): { turn: ModernTurn | null; waitingOnApproval: boolean } {
   if (!isObjectRecord(threadReadResult) || !isObjectRecord(threadReadResult.thread)) {
-    return null;
+    return { turn: null, waitingOnApproval: false };
   }
 
+  const waitingOnApproval = hasWaitingOnApprovalFlag(threadReadResult.thread.status);
   const turns = threadReadResult.thread.turns;
   if (!Array.isArray(turns)) {
-    return null;
+    return { turn: null, waitingOnApproval };
   }
 
   for (const item of turns) {
@@ -397,14 +478,17 @@ function findTurnById(threadReadResult: unknown, turnId: string): ModernTurn | n
     }
 
     return {
-      id: turnId,
-      status,
-      error: item.error,
-      items: item.items,
+      turn: {
+        id: turnId,
+        status,
+        error: item.error,
+        items: item.items,
+      },
+      waitingOnApproval,
     };
   }
 
-  return null;
+  return { turn: null, waitingOnApproval };
 }
 
 function mapModernTurnToAppServerEvent(turn: ModernTurn): AppServerTurnEvent {
@@ -422,8 +506,9 @@ function mapModernTurnToAppServerEvent(turn: ModernTurn): AppServerTurnEvent {
     const event: AppServerTurnApprovalRequiredEvent = {
       id: turn.id,
       type: "turn.approval_required",
-      kind: "approval_required",
-      prompt: "Codex app-server requires approval to continue.",
+      kind: turn.approvalKind ?? "approval_required",
+      prompt: turn.approvalPrompt ?? "Codex app-server requires approval to continue.",
+      continuationToken: turn.continuationToken,
     };
     return event;
   }
@@ -481,6 +566,35 @@ function extractTurnErrorMessage(error: unknown) {
 function isRunningStatus(status: string) {
   const normalized = status.toLowerCase();
   return normalized === "inprogress" || normalized === "running";
+}
+
+function hasWaitingOnApprovalFlag(status: unknown) {
+  if (!isObjectRecord(status)) {
+    return false;
+  }
+
+  const activeFlags = status.activeFlags;
+  if (!Array.isArray(activeFlags)) {
+    return false;
+  }
+
+  return activeFlags.includes("waitingOnApproval");
+}
+
+async function waitForApprovalOrInterval(
+  approvalNotificationPromise: Promise<ModernApprovalNotification | null>,
+  deadline: number,
+) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    return null;
+  }
+
+  const interval = Math.min(TURN_POLL_INTERVAL_MS, remaining);
+  return Promise.race([
+    approvalNotificationPromise,
+    sleep(interval).then(() => null),
+  ]);
 }
 
 function isCapabilityMismatch(error: unknown) {

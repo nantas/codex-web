@@ -70,13 +70,14 @@ Alternative terminal states: `failed`, `interrupted`.
 - Interrupt uses protocol-first path (`app-server interrupt`) and falls back to process signals (`SIGINT` -> `SIGKILL`).
 - app-server fallback policy is strict: only `unavailable` errors fallback to `codex exec`; protocol/execution/timeout errors are surfaced with classified failure text.
 - app-server adapter now speaks real codex methods (`initialize`, `thread/start`, `turn/start`, `thread/read`, `turn/interrupt`) and keeps legacy `turn.start`/`turn.resume`/`turn.interrupt` fallback for compatibility.
+- modern 审批事件识别：优先消费 `item/commandExecution/requestApproval` 通知；若通知缺失，则基于 `thread.status.activeFlags=waitingOnApproval` 兜底映射 `waitingApproval`。
 
 ## Approval Queue Behavior
 
 When an operation requires approval:
 
 1. Operation status updates to `waitingApproval`.
-2. A new `Approval` row is persisted with `pending` status and prompt text.
+2. A new `Approval` row is persisted with `pending` status and prompt text（来自 app-server 审批通知或兜底提示）。
 3. Client polls operation status and renders approval panel.
 4. `POST /api/v1/approvals/:approvalId/decision` updates approval + operation state:
    - `approve` -> approval `approved`, operation `running`
