@@ -32,12 +32,16 @@ type ModernApprovalNotification = {
   kind: string;
   prompt: string;
   continuationToken?: string;
+  requestId?: string | number;
+  approvePayload?: unknown;
+  denyPayload?: unknown;
 };
 
 export class CodexCliAppServerClient implements AppServerClient {
   private readonly initializedWorkspaces = new Set<string>();
   private readonly threadIdByLogicalThread = new Map<string, string>();
   private readonly threadIdByOperationId = new Map<string, string>();
+  private readonly turnIdByOperationId = new Map<string, string>();
 
   constructor(private readonly processManager = new AppServerProcessManager()) {}
 
@@ -66,6 +70,11 @@ export class CodexCliAppServerClient implements AppServerClient {
 
   async resumeAfterApproval(input: AppServerResumeInput): Promise<AppServerTurnEvent> {
     await this.ensureProcessOrThrow(input.workspaceId, input.cwd);
+
+    const modern = await this.tryResumeAfterApprovalModern(input);
+    if (modern) {
+      return modern;
+    }
 
     try {
       const response = await this.processManager.sendRequest({
@@ -188,6 +197,7 @@ export class CodexCliAppServerClient implements AppServerClient {
 
     const startedTurn = extractModernTurnFromStart(started);
     this.threadIdByOperationId.set(input.operationId, threadId);
+    this.turnIdByOperationId.set(input.operationId, startedTurn.id);
 
     if (!isRunningStatus(startedTurn.status)) {
       return mapModernTurnToAppServerEvent(startedTurn);
@@ -201,6 +211,44 @@ export class CodexCliAppServerClient implements AppServerClient {
       timeoutMs: MODERN_TURN_TIMEOUT_MS,
     });
 
+    return mapModernTurnToAppServerEvent(completed);
+  }
+
+  private async tryResumeAfterApprovalModern(
+    input: AppServerResumeInput,
+  ): Promise<AppServerTurnEvent | null> {
+    const token = parseModernApprovalToken(input.continuationToken);
+    if (!token) {
+      return null;
+    }
+
+    const threadId = token.threadId ?? this.threadIdByOperationId.get(input.operationId);
+    const turnId = token.turnId ?? this.turnIdByOperationId.get(input.operationId);
+    if (!threadId || !turnId) {
+      throw new AppServerClientError(
+        "execution",
+        `missing modern resume context for operation ${input.operationId}`,
+      );
+    }
+
+    const resultPayload =
+      input.decision === "approve"
+        ? token.approvePayload ?? "accept"
+        : token.denyPayload ?? "cancel";
+    await this.processManager.sendServerResponse({
+      workspaceId: input.workspaceId,
+      cwd: input.cwd,
+      requestId: token.requestId,
+      result: resultPayload,
+    });
+
+    const completed = await this.waitForModernTurnCompletion({
+      workspaceId: input.workspaceId,
+      cwd: input.cwd,
+      threadId,
+      turnId,
+      timeoutMs: MODERN_TURN_TIMEOUT_MS,
+    });
     return mapModernTurnToAppServerEvent(completed);
   }
 
@@ -321,7 +369,15 @@ export class CodexCliAppServerClient implements AppServerClient {
           status: "approval_required",
           approvalKind: approvalNotification.kind,
           approvalPrompt: approvalNotification.prompt,
-          continuationToken: approvalNotification.continuationToken,
+          continuationToken:
+            approvalNotification.continuationToken ??
+            buildModernApprovalToken({
+              requestId: approvalNotification.requestId,
+              threadId: input.threadId,
+              turnId: input.turnId,
+              approvePayload: approvalNotification.approvePayload,
+              denyPayload: approvalNotification.denyPayload,
+            }),
         };
       }
     }
@@ -359,6 +415,13 @@ export class CodexCliAppServerClient implements AppServerClient {
       params && typeof params.continuationToken === "string"
         ? params.continuationToken
         : undefined;
+    const requestId =
+      typeof payload.id === "string" || typeof payload.id === "number" ? payload.id : undefined;
+    const availableDecisions = params && Array.isArray(params.availableDecisions)
+      ? params.availableDecisions
+      : undefined;
+    const approvePayload = pickModernApproveDecisionPayload(availableDecisions);
+    const denyPayload = pickModernDenyDecisionPayload(availableDecisions);
 
     return {
       kind: "commandExecution",
@@ -366,6 +429,9 @@ export class CodexCliAppServerClient implements AppServerClient {
         ? `Codex app-server requests approval to execute: ${command}`
         : "Codex app-server requires approval to continue.",
       continuationToken,
+      requestId,
+      approvePayload,
+      denyPayload,
     };
   }
 }
@@ -638,4 +704,93 @@ function isTransientThreadReadState(error: unknown) {
 
 async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type ModernApprovalToken = {
+  protocol: "codex-web-modern-approval";
+  requestId: string | number;
+  threadId?: string;
+  turnId?: string;
+  approvePayload?: unknown;
+  denyPayload?: unknown;
+};
+
+function buildModernApprovalToken(input: {
+  requestId?: string | number;
+  threadId?: string;
+  turnId?: string;
+  approvePayload?: unknown;
+  denyPayload?: unknown;
+}) {
+  if (typeof input.requestId !== "string" && typeof input.requestId !== "number") {
+    return undefined;
+  }
+
+  const token: ModernApprovalToken = {
+    protocol: "codex-web-modern-approval",
+    requestId: input.requestId,
+    threadId: input.threadId,
+    turnId: input.turnId,
+    approvePayload: input.approvePayload,
+    denyPayload: input.denyPayload,
+  };
+  return JSON.stringify(token);
+}
+
+function parseModernApprovalToken(raw: string | undefined): ModernApprovalToken | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as ModernApprovalToken;
+    if (parsed.protocol !== "codex-web-modern-approval") {
+      return null;
+    }
+    if (typeof parsed.requestId !== "string" && typeof parsed.requestId !== "number") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function pickModernApproveDecisionPayload(availableDecisions: unknown[] | undefined): unknown {
+  if (!availableDecisions) {
+    return "accept";
+  }
+
+  for (const item of availableDecisions) {
+    if (item === "accept") {
+      return "accept";
+    }
+  }
+
+  for (const item of availableDecisions) {
+    if (!isObjectRecord(item)) {
+      continue;
+    }
+
+    const keys = Object.keys(item);
+    if (keys.length > 0 && keys[0].startsWith("accept")) {
+      return item;
+    }
+  }
+
+  return "accept";
+}
+
+function pickModernDenyDecisionPayload(availableDecisions: unknown[] | undefined): unknown {
+  if (!availableDecisions) {
+    return "cancel";
+  }
+
+  for (const item of availableDecisions) {
+    if (item === "cancel" || item === "deny") {
+      return item;
+    }
+  }
+
+  return "cancel";
 }

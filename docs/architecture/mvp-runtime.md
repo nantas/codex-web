@@ -73,6 +73,7 @@ Alternative terminal states: `failed`, `interrupted`.
 - app-server adapter now speaks real codex methods (`initialize`, `thread/start`, `turn/start`, `thread/read`, `turn/interrupt`) and keeps legacy `turn.start`/`turn.resume`/`turn.interrupt` fallback for compatibility.
 - modern 审批事件识别：优先消费 `item/commandExecution/requestApproval` 通知；若通知缺失，则基于 `thread.status.activeFlags=waitingOnApproval` 兜底映射 `waitingApproval`。
 - modern `thread/read` 瞬态状态（如 “thread not materialized yet”）按可重试错误处理，避免 turn 启动初期误判失败。
+- modern 审批恢复优先走 server-request 原生语义：对 `requestApproval` 通知里的 `id` 回写 `result`（如 `accept`）后继续同一 turn；仅在无 modern token 时回退 legacy `turn.resume`。
 
 ## Approval Queue Behavior
 

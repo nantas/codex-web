@@ -229,4 +229,72 @@ describe("CodexCliAppServerClient modern approval detection", () => {
       kind: "commandExecution",
     });
   });
+
+  it("resumes modern approval by replying to server request id", async () => {
+    const manager = new AppServerProcessManager();
+    let readCount = 0;
+
+    vi.spyOn(manager, "getOrStart").mockResolvedValue({
+      id: "pm_4",
+      endpoint: "stdio://fake",
+      pid: 1004,
+    });
+
+    const sendRequest = vi.spyOn(manager, "sendRequest").mockImplementation(async ({ method }) => {
+      if (method === "thread/read") {
+        readCount += 1;
+        return {
+          thread: {
+            status: { type: "active", activeFlags: [] },
+            turns: [
+              {
+                id: "turn-modern-4",
+                status: readCount === 1 ? "inProgress" : "completed",
+                items:
+                  readCount === 1
+                    ? []
+                    : [{ type: "agentMessage", text: "resumed-ok" }],
+                error: null,
+              },
+            ],
+          },
+        };
+      }
+
+      throw new Error(`unexpected method: ${method}`);
+    });
+
+    const sendServerResponse = vi.spyOn(manager, "sendServerResponse").mockResolvedValue();
+    const client = new CodexCliAppServerClient(manager);
+    const event = await client.resumeAfterApproval({
+      operationId: "op-modern-approval-4",
+      workspaceId: "ws-modern-approval-4",
+      cwd: process.cwd(),
+      approvalId: "apr-modern-4",
+      decision: "approve",
+      continuationToken: JSON.stringify({
+        protocol: "codex-web-modern-approval",
+        requestId: 7,
+        threadId: "thread-modern-4",
+        turnId: "turn-modern-4",
+        approvePayload: "accept",
+        denyPayload: "cancel",
+      }),
+    });
+
+    expect(sendServerResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 7,
+        result: "accept",
+      }),
+    );
+    expect(sendRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "thread/read" }),
+    );
+    expect(event).toMatchObject({
+      id: "turn-modern-4",
+      type: "turn.completed",
+      outputText: "resumed-ok",
+    });
+  });
 });

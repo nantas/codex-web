@@ -165,6 +165,40 @@ export class AppServerProcessManager {
     });
   }
 
+  async sendServerResponse(input: {
+    workspaceId: string;
+    cwd: string;
+    requestId: string | number;
+    result?: unknown;
+    error?: { code?: string | number; message: string };
+  }): Promise<void> {
+    await this.getOrStart(input.workspaceId, { cwd: input.cwd });
+    const handle = this.byWorkspace.get(input.workspaceId);
+    if (!handle || handle.closed) {
+      throw new AppServerClientError("unavailable", "app-server process not available");
+    }
+
+    if (!handle.child.stdin.writable) {
+      throw new AppServerClientError("unavailable", "app-server stdin not writable");
+    }
+
+    const payload = JSON.stringify({
+      id: input.requestId,
+      result: input.error ? undefined : input.result,
+      error: input.error,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      handle.child.stdin.write(`${payload}\n`, (error) => {
+        if (!error) {
+          resolve();
+          return;
+        }
+        reject(new AppServerClientError("unavailable", `app-server write failed: ${error.message}`));
+      });
+    });
+  }
+
   private spawnProcess(cwd: string) {
     const command = getCodexCommand();
 
