@@ -7,6 +7,8 @@ describe("CodexAppServerGateway", () => {
       appServerClient: {
         isAvailable: async () => true,
         startTurn: async () => ({ id: "evt-1", type: "turn.completed", outputText: "hello" }),
+        resumeAfterApproval: async () => ({ id: "evt-2", type: "turn.completed", outputText: "hello" }),
+        interruptTurn: async () => {},
       },
     });
 

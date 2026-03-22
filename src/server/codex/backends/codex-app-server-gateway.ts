@@ -28,12 +28,18 @@ type OperationContext = {
   text: string;
 };
 
+type ActiveAppServerTurn = {
+  workspaceId: string;
+  turnId: string;
+};
+
 export class CodexAppServerGateway implements RunnerGateway {
   backend = "codex" as const;
 
   private readonly manager: RunnerManager;
   private readonly appServerClient: AppServerClient;
   private readonly activeExecutions = new Map<string, ActiveExecution>();
+  private readonly activeAppServerTurns = new Map<string, ActiveAppServerTurn>();
   private readonly operationContexts = new Map<string, OperationContext>();
 
   constructor(input?: { manager?: RunnerManager; appServerClient?: AppServerClient }) {
@@ -138,6 +144,22 @@ export class CodexAppServerGateway implements RunnerGateway {
   }
 
   async interruptTurn(input: { operationId: string }) {
+    const protocolTurn = this.activeAppServerTurns.get(input.operationId);
+    if (protocolTurn) {
+      try {
+        await this.appServerClient.interruptTurn({
+          operationId: input.operationId,
+          workspaceId: protocolTurn.workspaceId,
+          turnId: protocolTurn.turnId,
+        });
+        this.activeAppServerTurns.delete(input.operationId);
+        this.manager.touch(protocolTurn.workspaceId);
+        return;
+      } catch {
+        // fallback to process-signal interruption
+      }
+    }
+
     const active = this.activeExecutions.get(input.operationId);
     if (!active) {
       return;
@@ -190,6 +212,15 @@ export class CodexAppServerGateway implements RunnerGateway {
         decision: input.decision,
         continuationToken: input.continuationToken,
       });
+      const context = this.operationContexts.get(input.operationId);
+      if (event.type === "turn.completed") {
+        this.activeAppServerTurns.delete(input.operationId);
+      } else if (context) {
+        this.activeAppServerTurns.set(input.operationId, {
+          workspaceId: context.workspaceId,
+          turnId: event.id,
+        });
+      }
       return mapAppServerEventToResult(event);
     } catch {
       return null;
@@ -256,6 +287,14 @@ export class CodexAppServerGateway implements RunnerGateway {
 
     try {
       const event = await this.appServerClient.startTurn(input);
+      if (event.type === "turn.completed") {
+        this.activeAppServerTurns.delete(input.operationId);
+      } else {
+        this.activeAppServerTurns.set(input.operationId, {
+          workspaceId: input.workspaceId,
+          turnId: event.id,
+        });
+      }
       return mapAppServerEventToResult(event);
     } catch {
       return null;

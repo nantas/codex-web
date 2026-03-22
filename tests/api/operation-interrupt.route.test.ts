@@ -113,4 +113,53 @@ describe("POST /api/v1/operations/[operationId]/interrupt", () => {
 
     await prisma.$disconnect();
   });
+
+  it("interrupts waitingApproval operation", async () => {
+    const prisma = new PrismaClient();
+    await prisma.approval.deleteMany();
+    await prisma.operationLog.deleteMany();
+    await prisma.operation.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.user.deleteMany();
+
+    await prisma.user.create({
+      data: { id: "usr_int_3", githubId: "8003", email: "int3@example.com", name: "Interrupt User 3" },
+    });
+
+    await prisma.session.create({
+      data: {
+        id: "ses_int_3",
+        userId: "usr_int_3",
+        workspaceId: "ws-int-3",
+        cwd: "/tmp/ws-int-3",
+        threadId: "thr_int_3",
+        status: "running",
+      },
+    });
+
+    await prisma.operation.create({
+      data: {
+        id: "op_int_3",
+        sessionId: "ses_int_3",
+        status: "waitingApproval",
+        requestText: "needs approval",
+      },
+    });
+
+    const response = await interruptOperation(
+      new Request("http://localhost/api/v1/operations/op_int_3/interrupt", {
+        method: "POST",
+      }),
+      { params: Promise.resolve({ operationId: "op_int_3" }) },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ operationId: "op_int_3", status: "interrupted" });
+
+    const operation = await prisma.operation.findUnique({ where: { id: "op_int_3" } });
+    expect(operation?.status).toBe("interrupted");
+
+    await prisma.$disconnect();
+  });
 });
