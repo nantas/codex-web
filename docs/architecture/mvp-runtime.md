@@ -71,6 +71,7 @@ Alternative terminal states: `failed`, `interrupted`.
 - app-server fallback policy is strict: only `unavailable` errors fallback to `codex exec`; protocol/execution/timeout errors are surfaced with classified failure text.
 - app-server adapter now speaks real codex methods (`initialize`, `thread/start`, `turn/start`, `thread/read`, `turn/interrupt`) and keeps legacy `turn.start`/`turn.resume`/`turn.interrupt` fallback for compatibility.
 - modern 审批事件识别：优先消费 `item/commandExecution/requestApproval` 通知；若通知缺失，则基于 `thread.status.activeFlags=waitingOnApproval` 兜底映射 `waitingApproval`。
+- modern `thread/read` 瞬态状态（如 “thread not materialized yet”）按可重试错误处理，避免 turn 启动初期误判失败。
 
 ## Approval Queue Behavior
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { AppServerClientError } from "@/server/codex/app-server/client";
 import { CodexCliAppServerClient } from "@/server/codex/app-server/codex-cli-app-server-client";
 import { AppServerProcessManager } from "@/server/codex/app-server/process-manager";
 
@@ -148,6 +149,84 @@ describe("CodexCliAppServerClient modern approval detection", () => {
       type: "turn.approval_required",
       kind: "commandExecution",
       prompt: "Codex app-server requires approval to continue.",
+    });
+  });
+
+  it("retries transient thread/read materialization error before mapping approval", async () => {
+    const manager = new AppServerProcessManager();
+    let readCount = 0;
+
+    vi.spyOn(manager, "getOrStart").mockResolvedValue({
+      id: "pm_3",
+      endpoint: "stdio://fake",
+      pid: 1003,
+    });
+
+    vi.spyOn(manager, "sendRequest").mockImplementation(async ({ method }) => {
+      if (method === "initialize") {
+        return {};
+      }
+      if (method === "thread/start") {
+        return { thread: { id: "thread-modern-3" } };
+      }
+      if (method === "turn/start") {
+        return {
+          turn: {
+            id: "turn-modern-3",
+            status: "inProgress",
+            items: [],
+            error: null,
+          },
+        };
+      }
+      if (method === "thread/read") {
+        readCount += 1;
+        if (readCount === 1) {
+          throw new AppServerClientError(
+            "execution",
+            "thread x is not materialized yet; includeTurns is unavailable before first user message",
+          );
+        }
+        return {
+          thread: {
+            status: { type: "active", activeFlags: ["waitingOnApproval"] },
+            turns: [
+              {
+                id: "turn-modern-3",
+                status: "inProgress",
+                items: [],
+                error: null,
+              },
+            ],
+          },
+        };
+      }
+
+      throw new Error(`unexpected method: ${method}`);
+    });
+
+    vi.spyOn(manager, "waitForNotification").mockImplementation(
+      async () =>
+        new Promise(() => {
+          // keep pending; this test validates transient thread/read retry path
+        }),
+    );
+
+    const client = new CodexCliAppServerClient(manager);
+    const event = await client.startTurn({
+      operationId: "op-modern-approval-3",
+      workspaceId: "ws-modern-approval-3",
+      cwd: process.cwd(),
+      sessionId: "ses-modern-approval-3",
+      threadId: "thr-modern-approval-3",
+      text: "transient materialization path",
+    });
+
+    expect(readCount).toBeGreaterThanOrEqual(2);
+    expect(event).toMatchObject({
+      id: "turn-modern-3",
+      type: "turn.approval_required",
+      kind: "commandExecution",
     });
   });
 });

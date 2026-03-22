@@ -273,15 +273,24 @@ export class CodexCliAppServerClient implements AppServerClient {
     }).catch(() => null);
 
     while (Date.now() <= deadline) {
-      const response = await this.processManager.sendRequest({
-        workspaceId: input.workspaceId,
-        cwd: input.cwd,
-        method: "thread/read",
-        params: {
-          threadId: input.threadId,
-          includeTurns: true,
-        },
-      });
+      let response: unknown;
+      try {
+        response = await this.processManager.sendRequest({
+          workspaceId: input.workspaceId,
+          cwd: input.cwd,
+          method: "thread/read",
+          params: {
+            threadId: input.threadId,
+            includeTurns: true,
+          },
+        });
+      } catch (error) {
+        if (isTransientThreadReadState(error)) {
+          await waitForApprovalOrInterval(approvalNotificationPromise, deadline);
+          continue;
+        }
+        throw error;
+      }
 
       const snapshot = findTurnSnapshotById(response, input.turnId);
       if (!snapshot.turn) {
@@ -612,6 +621,19 @@ function isCapabilityMismatch(error: unknown) {
     lower.includes("unknown variant") ||
     lower.includes("method not found")
   );
+}
+
+function isTransientThreadReadState(error: unknown) {
+  if (!isAppServerClientError(error)) {
+    return false;
+  }
+
+  if (error.code !== "execution" && error.code !== "protocol") {
+    return false;
+  }
+
+  const lower = error.message.toLowerCase();
+  return lower.includes("not materialized yet") || lower.includes("includeTurns is unavailable".toLowerCase());
 }
 
 async function sleep(ms: number) {
