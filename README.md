@@ -112,10 +112,19 @@ pnpm test
 pnpm test:e2e
 ```
 
+## Canonical Task / Handoff Paths
+
+- Task discovery entry: `docs/plans/README.md`
+- Handoff entry: `docs/handoff/current-handoff.md`
+- Progress writeback entry: `docs/progress/project-progress.md`
+- Historical plan docs under `docs/plans/*.md` are read-only unless explicitly requested.
+
 ## Full Guide
 
 See:
 
+- `docs/plans/README.md`
+- `docs/handoff/current-handoff.md`
 - `docs/guides/host-remote-access-and-auth.md`
 - `docs/architecture/tech-stack-overview.md`
 - `docs/architecture/solution-design-overview.md`

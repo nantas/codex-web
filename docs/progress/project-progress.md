@@ -1,6 +1,19 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第十九批已完成）
+更新时间：2026-03-22（H1 stabilization retrofit 已完成）
+
+## 0. 本次补充更新（2026-03-22，H1 stabilization retrofit）
+
+- 改动摘要：
+  - 新增统一任务发现入口：`docs/plans/README.md`。
+  - 新增独立交接入口：`docs/handoff/current-handoff.md`，并与进度回填字段对齐。
+  - 更新 `AGENTS.md` 与 `README.md`，声明 canonical task/handoff/progress 路径。
+  - 本轮仅进行文档治理改造，不涉及业务代码改动，不重写历史计划文档。
+- 验证结果：
+  - 文档一致性检查通过：`AGENTS.md`、`README.md`、`docs/plans/README.md`、`docs/handoff/current-handoff.md`、`docs/progress/project-progress.md` 中 canonical 路径可互相定位。
+  - 变更范围检查：`git diff --name-only` 仅包含文档文件变更。
+- 后续待办：
+  - 后续任务执行完成后，持续保持 `docs/progress/project-progress.md` 与 `docs/handoff/current-handoff.md` 的更新时间、改动摘要与验证结果同步。
 
 ## 1. 总体状态
 

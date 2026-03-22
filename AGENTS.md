@@ -35,6 +35,12 @@
 
 - [docs/progress/project-progress.md](docs/progress/project-progress.md)
 
+### 任务与交接入口（Canonical）
+
+- [docs/plans/README.md](docs/plans/README.md)（统一任务/计划发现入口）
+- [docs/handoff/current-handoff.md](docs/handoff/current-handoff.md)（统一交接入口）
+- [docs/progress/project-progress.md](docs/progress/project-progress.md)（统一进展回填入口）
+
 ### 历史计划文档（只读，除非用户明确要求）
 
 - [docs/plans/2026-03-21-codex-web-mvp-http-polling.md](docs/plans/2026-03-21-codex-web-mvp-http-polling.md)
@@ -52,6 +58,7 @@
    - 本次改动摘要
    - 验证结果
    - 后续待办（如有）
+3. 若本次改动影响任务状态或接手信息，必须同步更新 [docs/handoff/current-handoff.md](docs/handoff/current-handoff.md)，并与进度回填的更新时间和摘要保持一致。
 
 ### 4.2 新建文档的确认门槛
 
@@ -80,7 +87,8 @@
 2. 相关验证命令已执行并记录结果。
 3. 按“变更触发表”更新对应文档。
 4. [docs/progress/project-progress.md](docs/progress/project-progress.md) 已同步本次变更。
-5. 若新增了文档，已确认用户事先同意。
+5. 如涉及任务状态流转，[docs/handoff/current-handoff.md](docs/handoff/current-handoff.md) 已同步更新并与进度回填一致。
+6. 若新增了文档，已确认用户事先同意。
 
 ## 7. 建议验证命令
 
