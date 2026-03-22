@@ -128,6 +128,14 @@ Then:
 3. Poll `GET /api/v1/operations/<operationId>` until terminal status and confirm `resultText`.
 4. Open `http://localhost:43173/sessions/<sessionId>` and validate `Send Turn` end-to-end in page.
 
+Real codex approval smoke (deterministic deny path):
+
+```bash
+pnpm validate:real-codex
+```
+
+Expected result: script prints summary JSON, operation reaches `waitingApproval`, then `deny` transitions operation to `failed`, and command exits with code `0`.
+
 Note (Next.js 16 dev mode): prefer `localhost` over `127.0.0.1` for manual web verification to avoid dev-resource cross-origin restrictions affecting HMR/hydration.
 
 ## Start OAuth Sign-In
