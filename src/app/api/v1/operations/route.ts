@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       requestText: text,
     });
 
-    await service.markRunning(operation.id);
+    await service.startExecution(operation.id);
 
     return NextResponse.json(
       { operationId: operation.id, status: "running", pollAfterMs: 1000 },

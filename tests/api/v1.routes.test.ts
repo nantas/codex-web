@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { POST as createOperation } from "@/app/api/v1/operations/route";
+import { OperationService } from "@/server/services/operation-service";
 
 describe("POST /api/v1/operations", () => {
   it("returns 202 with operationId", async () => {
@@ -34,13 +35,20 @@ describe("POST /api/v1/operations", () => {
       }),
       headers: { "content-type": "application/json" },
     });
+    const startExecutionSpy = vi
+      .spyOn(OperationService.prototype, "startExecution")
+      .mockImplementation(async (operationId: string) =>
+        prisma.operation.findUniqueOrThrow({ where: { id: operationId } }),
+      );
     const response = await createOperation(request);
     const body = await response.json();
 
     expect(response.status).toBe(202);
     expect(body.operationId).toBeTruthy();
     expect(body.status).toBe("running");
+    expect(startExecutionSpy).toHaveBeenCalledWith(body.operationId);
 
+    startExecutionSpy.mockRestore();
     await prisma.$disconnect();
   });
 });

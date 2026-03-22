@@ -1,5 +1,9 @@
-export type RunnerHandle = {
+export type RunnerRuntime = {
   id: string;
   workspaceId: string;
-  status: "ready" | "failed";
+  cwd: string;
+  endpoint: string | null;
+  pid: number | null;
+  status: "starting" | "ready" | "failed" | "stopped";
+  lastSeenAt: string | null;
 };

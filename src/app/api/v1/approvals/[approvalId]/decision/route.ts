@@ -3,8 +3,10 @@ import { approvalDecisionRequestSchema } from "@/server/contracts/api";
 import { prisma } from "@/server/db/prisma";
 import { HttpError, toErrorResponse } from "@/server/http/errors";
 import { OperationLogService } from "@/server/services/operation-log-service";
+import { OperationService } from "@/server/services/operation-service";
 
 const operationLogService = new OperationLogService();
+const operationService = new OperationService();
 
 export async function POST(
   req: Request,
@@ -37,6 +39,13 @@ export async function POST(
           ? `approval ${approval.id} approved`
           : `approval ${approval.id} denied`,
     });
+    if (parsed.data.decision === "approve") {
+      await operationService.resumeAfterApproval({
+        operationId: approval.operationId,
+        approvalId: approval.id,
+        decision: "approve",
+      });
+    }
 
     return NextResponse.json({ approvalId: approval.id, status: approval.status });
   } catch (error) {

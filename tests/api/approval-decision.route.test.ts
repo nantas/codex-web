@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { POST as decideApproval } from "@/app/api/v1/approvals/[approvalId]/decision/route";
+import { OperationService } from "@/server/services/operation-service";
 
 describe("POST /api/v1/approvals/[approvalId]/decision", () => {
   it("approves pending approval and moves operation back to running", async () => {
@@ -44,26 +45,35 @@ describe("POST /api/v1/approvals/[approvalId]/decision", () => {
       },
     });
 
-    const response = await decideApproval(
-      new Request("http://localhost/api/v1/approvals/apr_9/decision", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decision: "approve" }),
-      }),
-      { params: Promise.resolve({ approvalId: "apr_9" }) },
-    );
+    const resumeSpy = vi.spyOn(OperationService.prototype, "resumeAfterApproval").mockResolvedValue();
+    try {
+      const response = await decideApproval(
+        new Request("http://localhost/api/v1/approvals/apr_9/decision", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ decision: "approve" }),
+        }),
+        { params: Promise.resolve({ approvalId: "apr_9" }) },
+      );
 
-    const body = await response.json();
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({ approvalId: "apr_9", status: "approved" });
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ approvalId: "apr_9", status: "approved" });
+      expect(resumeSpy).toHaveBeenCalledWith({
+        operationId: "op_9",
+        approvalId: "apr_9",
+        decision: "approve",
+      });
 
-    const approval = await prisma.approval.findUnique({ where: { id: "apr_9" } });
-    const operation = await prisma.operation.findUnique({ where: { id: "op_9" } });
+      const approval = await prisma.approval.findUnique({ where: { id: "apr_9" } });
+      const operation = await prisma.operation.findUnique({ where: { id: "op_9" } });
 
-    expect(approval?.status).toBe("approved");
-    expect(approval?.decision).toBe("approve");
-    expect(operation?.status).toBe("running");
-
-    await prisma.$disconnect();
+      expect(approval?.status).toBe("approved");
+      expect(approval?.decision).toBe("approve");
+      expect(operation?.status).toBe("running");
+    } finally {
+      resumeSpy.mockRestore();
+      await prisma.$disconnect();
+    }
   });
 });

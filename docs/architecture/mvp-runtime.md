@@ -2,9 +2,12 @@
 
 ## Single-Process Module Map
 
-- `src/server/codex/runner-manager.ts`: in-process runner handle manager keyed by `workspaceId`.
+- `src/server/runtime/execution-config.ts`: runtime backend switch (`mock | codex`).
+- `src/server/codex/runner-manager.ts`: in-process runner runtime manager keyed by `workspaceId`.
+- `src/server/codex/runner-gateway.ts`: backend gateway abstraction + factory.
+- `src/server/services/operation-execution-registry.ts`: in-memory operation execution references for resume/interrupt.
 - `src/server/services/session-service.ts`: session creation/read logic.
-- `src/server/services/operation-service.ts`: operation lifecycle persistence and approval pause handling.
+- `src/server/services/operation-service.ts`: operation lifecycle orchestration (queue -> running -> terminal/waitingApproval), gateway dispatch and result writeback.
 - `src/server/http/*`: route-level auth and error mapping helpers.
 - `src/app/api/v1/*`: HTTP API surface used by frontend polling.
 
@@ -49,6 +52,14 @@ Typical path:
 5. `completed` (result finalized)
 
 Alternative terminal states: `failed`, `interrupted`.
+
+## Execution Backend and Fallback
+
+- `EXECUTION_BACKEND=mock` (default): use mock gateway to keep API/UI polling behavior stable.
+- `EXECUTION_BACKEND=codex`: route operation execution through codex app-server gateway.
+- Any unset/unknown backend value falls back to `mock`.
+- `POST /api/v1/operations` returns `202` quickly after `startExecution`, then `OperationService.dispatchExecution` continues asynchronously.
+- Approval resume and interrupt reuse execution registry + gateway, so routing remains consistent across `mock` and `codex`.
 
 ## Approval Queue Behavior
 

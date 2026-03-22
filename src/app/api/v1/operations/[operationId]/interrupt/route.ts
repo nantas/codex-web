@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/server/db/prisma";
 import { HttpError, toErrorResponse } from "@/server/http/errors";
 import { OperationLogService } from "@/server/services/operation-log-service";
+import { OperationService } from "@/server/services/operation-service";
 
 const operationLogService = new OperationLogService();
+const operationService = new OperationService();
 
 export async function POST(
   _req: Request,
@@ -11,6 +13,7 @@ export async function POST(
 ) {
   try {
     const { operationId } = await context.params;
+    await operationService.interruptExecution(operationId);
     const operation = await prisma.operation.update({
       where: { id: operationId },
       data: { status: "interrupted" },

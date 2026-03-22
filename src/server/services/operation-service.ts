@@ -1,13 +1,37 @@
+import { getRunnerGateway, type RunnerGateway, type TurnExecutionResult } from "@/server/codex/runner-gateway";
 import { prisma } from "@/server/db/prisma";
+import {
+  OperationExecutionRegistry,
+  type OperationExecutionHandle,
+} from "@/server/services/operation-execution-registry";
 import { OperationLogService } from "@/server/services/operation-log-service";
 
 const operationLogService = new OperationLogService();
+const executionRegistry = new OperationExecutionRegistry();
 
-export function createOperationServiceForTest() {
-  return new OperationService();
+type OperationServiceDeps = {
+  gateway: RunnerGateway;
+  registry: OperationExecutionRegistry;
+  operationLogs: OperationLogService;
+};
+
+export function createOperationServiceForTest(overrides: Partial<OperationServiceDeps> = {}) {
+  return new OperationService({
+    gateway: overrides.gateway ?? getRunnerGateway(),
+    registry: overrides.registry ?? new OperationExecutionRegistry(),
+    operationLogs: overrides.operationLogs ?? new OperationLogService(),
+  });
 }
 
 export class OperationService {
+  constructor(
+    private readonly deps: OperationServiceDeps = {
+      gateway: getRunnerGateway(),
+      registry: executionRegistry,
+      operationLogs: operationLogService,
+    },
+  ) {}
+
   async createQueued(input: { sessionId: string; requestText: string }) {
     const operation = await prisma.operation.create({
       data: {
@@ -17,7 +41,7 @@ export class OperationService {
       },
     });
 
-    await operationLogService.append(operation.id, {
+    await this.deps.operationLogs.append(operation.id, {
       level: "info",
       message: `queued request: ${input.requestText}`,
     });
@@ -31,8 +55,56 @@ export class OperationService {
       data: { status: "running" },
     });
 
-    await operationLogService.append(operation.id, { level: "info", message: "operation started" });
+    await this.deps.operationLogs.append(operation.id, { level: "info", message: "operation started" });
     return operation;
+  }
+
+  async startExecution(operationId: string) {
+    const operation = await this.markRunning(operationId);
+    void this.dispatchExecution(operationId);
+    return operation;
+  }
+
+  async dispatchExecution(operationId: string) {
+    try {
+      const operation = await prisma.operation.findUnique({
+        where: { id: operationId },
+        include: { session: true },
+      });
+
+      if (!operation) {
+        return;
+      }
+
+      this.deps.registry.set({
+        operationId: operation.id,
+        sessionId: operation.sessionId,
+        threadId: operation.session.threadId,
+        workspaceId: operation.session.workspaceId,
+        cwd: operation.session.cwd,
+      });
+
+      await this.deps.gateway.ensureRunner({
+        workspaceId: operation.session.workspaceId,
+        cwd: operation.session.cwd,
+      });
+
+      const result = await this.deps.gateway.startTurn({
+        operationId: operation.id,
+        sessionId: operation.sessionId,
+        threadId: operation.session.threadId,
+        text: operation.requestText,
+      });
+
+      await this.applyTurnResult(operation.id, result);
+
+      if (result.status !== "running" && result.status !== "waitingApproval") {
+        this.deps.registry.delete(operation.id);
+      }
+    } catch (error) {
+      await this.failOperation(operationId, toErrorMessage(error));
+      this.deps.registry.delete(operationId);
+    }
   }
 
   async requireApproval(operationId: string, input: { kind: string; prompt: string }) {
@@ -40,7 +112,7 @@ export class OperationService {
       where: { id: operationId },
       data: { status: "waitingApproval" },
     });
-    await operationLogService.append(operationId, {
+    await this.deps.operationLogs.append(operationId, {
       level: "info",
       message: `waiting approval (${input.kind}): ${input.prompt}`,
     });
@@ -55,7 +127,110 @@ export class OperationService {
     });
   }
 
+  async resumeAfterApproval(input: {
+    operationId: string;
+    approvalId: string;
+    decision: "approve" | "deny";
+  }) {
+    const handle = await this.getOrCreateHandle(input.operationId);
+    if (!handle) {
+      throw new Error(`Operation not found: ${input.operationId}`);
+    }
+
+    await this.deps.gateway.ensureRunner({ workspaceId: handle.workspaceId, cwd: handle.cwd });
+    const result = await this.deps.gateway.resumeAfterApproval(input);
+
+    await this.applyTurnResult(input.operationId, result);
+
+    if (result.status !== "running" && result.status !== "waitingApproval") {
+      this.deps.registry.delete(input.operationId);
+    }
+  }
+
+  async interruptExecution(operationId: string) {
+    await this.deps.gateway.interruptTurn({ operationId });
+    this.deps.registry.delete(operationId);
+  }
+
   async getById(operationId: string) {
     return prisma.operation.findUnique({ where: { id: operationId } });
   }
+
+  private async getOrCreateHandle(operationId: string): Promise<OperationExecutionHandle | null> {
+    const cached = this.deps.registry.get(operationId);
+    if (cached) {
+      return cached;
+    }
+
+    const operation = await prisma.operation.findUnique({
+      where: { id: operationId },
+      include: { session: true },
+    });
+
+    if (!operation) {
+      return null;
+    }
+
+    const handle: OperationExecutionHandle = {
+      operationId: operation.id,
+      sessionId: operation.sessionId,
+      threadId: operation.session.threadId,
+      workspaceId: operation.session.workspaceId,
+      cwd: operation.session.cwd,
+    };
+
+    this.deps.registry.set(handle);
+    return handle;
+  }
+
+  private async applyTurnResult(operationId: string, result: TurnExecutionResult) {
+    if (result.status === "completed") {
+      await prisma.operation.update({
+        where: { id: operationId },
+        data: { status: "completed", resultText: result.resultText, errorMessage: null },
+      });
+      await this.deps.operationLogs.append(operationId, {
+        level: "info",
+        message: `operation completed: ${result.resultText}`,
+      });
+      return;
+    }
+
+    if (result.status === "failed") {
+      await this.failOperation(operationId, result.errorMessage);
+      return;
+    }
+
+    if (result.status === "waitingApproval") {
+      await this.requireApproval(operationId, {
+        kind: result.kind,
+        prompt: result.prompt,
+      });
+      return;
+    }
+
+    await this.deps.operationLogs.append(operationId, {
+      level: "info",
+      message: "operation is running",
+    });
+  }
+
+  private async failOperation(operationId: string, errorMessage: string) {
+    await prisma.operation.update({
+      where: { id: operationId },
+      data: { status: "failed", errorMessage },
+    });
+    await this.deps.operationLogs.append(operationId, {
+      level: "error",
+      message: `operation failed: ${errorMessage}`,
+    });
+  }
+}
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "unknown execution error";
 }

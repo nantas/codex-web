@@ -1,6 +1,6 @@
 # 项目进度（Codex Web MVP）
 
-更新时间：2026-03-22（执行链路设计与实施计划第十五批已完成）
+更新时间：2026-03-22（Codex CLI 执行链路 Phase 1 第十六批已完成）
 
 ## 1. 总体状态
 
@@ -30,6 +30,10 @@
   - 第十四批（本次完成）：日志过滤重置/重试成功后对应失败时间提示会自动清理，避免陈旧告警残留。
   - 第十五批（本次完成）：完成 Codex CLI 真实执行链路接入的上下文收敛与需求确认，输出设计文档与实施计划文档（聚焦 workspace 常驻 app-server 模式）。
   - 第十五批（本次完成）：明确 Phase 1 目标范围（执行+审批+中断）、单机 MVP 边界、失败快速收敛与回滚策略（`mock|codex` 后端开关）。
+  - 第十六批（本次完成）：新增运行时后端开关 `EXECUTION_BACKEND=mock|codex`，默认 `mock`，并接入 `RunnerGateway` 工厂（mock/codex）。
+  - 第十六批（本次完成）：升级 `RunnerManager` 运行时元数据（workspace/cwd/endpoint/pid/status/lastSeenAt），新增 `OperationExecutionRegistry`，`OperationService` 接入异步执行编排（`startExecution -> dispatchExecution`）。
+  - 第十六批（本次完成）：`POST /api/v1/operations` 改为异步执行路径；审批 `approve` 分支接线 `resumeAfterApproval`；中断路由接线 `interruptExecution`。
+  - 第十六批（本次完成）：新增 codex app-server integration guard 测试（`RUN_CODEX_INTEGRATION` 门控，默认 skipped），并更新 README/架构文档说明 codex 预检与回退策略。
   - 新增 `pollIntervalMs` 组件参数用于稳定测试与轮询行为控制。
   - 新增 `session-detail-url-state` 解析/序列化工具，统一 URL 状态处理逻辑。
   - `OperationLogService.list` 新增 `level/time-range` 过滤能力，与 cursor 查询可组合使用。
@@ -50,10 +54,14 @@
   - 第十三批新增测试通过：`tests/ui/log-poll-backoff.test.ts`（无过滤直轮询、失败后 jitter 区间、最大退避上限）。
   - 第十四批新增测试通过：`tests/ui/session-detail-live.test.tsx`（手动/自动日志失败分层提示与时间戳显示）。
   - 第十五批文档产物：`docs/plans/2026-03-22-codex-cli-execution-chain-design.md` 与 `docs/plans/2026-03-22-codex-cli-execution-chain-implementation-plan.md`。
+  - 第十六批新增测试通过：`tests/runtime/execution-config.test.ts`、`tests/codex/runner-gateway.test.ts`、`tests/services/operation-execution.service.test.ts`、`tests/api/operation-interrupt.route.test.ts`。
+  - 第十六批集成守卫：`tests/codex/codex-app-server-gateway.integration.test.ts` 默认 skipped（未设置 `RUN_CODEX_INTEGRATION`）。
+  - 第十六批全量验证通过：`pnpm lint`、`pnpm typecheck`、`pnpm test`（24 passed, 1 skipped）、`pnpm test:e2e`（1 passed）。
 - 后续待办：
   - 按实施计划进入真实执行链路编码阶段（Protocol Spike -> startTurn -> approval/interruption）。
   - 增加 operation 历史筛选与搜索能力。
   - 增加日志失败提示的本地化时间展示与用户时区格式切换。
+  - 补充 codex app-server 协议细节（线程恢复、审批事件映射、日志回写）并将 integration test 从 guard 模式推进到可稳定执行。
 
 ## 3. 里程碑完成情况
 

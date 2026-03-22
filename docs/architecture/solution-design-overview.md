@@ -16,7 +16,8 @@
 - 单体应用：前端页面 + API 路由同仓同进程
 - 数据持久化：Prisma + SQLite
 - 控制流：Session / Operation / Approval 三段式
-- Runner 管理：单进程内 `RunnerManager` 抽象（按 workspace 复用）
+- Runner 管理：`RunnerManager` + `RunnerGateway`（`mock|codex` 后端可切换）
+- 执行编排：`OperationService` + `OperationExecutionRegistry`（异步执行、审批恢复、中断）
 
 ## 3. 分层设计
 
@@ -56,12 +57,16 @@
 
 - `operation-state`：状态机规则
 - `SessionService` / `OperationService`
+- `RunnerGateway`（`MockRunnerGateway` / `CodexAppServerGateway`）
+- `OperationExecutionRegistry`
 
 职责：
 
 - 管理状态迁移
 - 落库与查询
-- 审批触发与决策落地
+- 异步执行调度（`startExecution -> dispatchExecution`）
+- 审批触发与决策落地（含 `resumeAfterApproval`）
+- 中断执行编排（`interruptExecution`）
 
 ### 3.4 持久化层
 
@@ -83,15 +88,17 @@
 ### 4.2 提交与轮询流程
 
 1. `POST /api/v1/operations` 创建 `queued`。
-2. 服务将状态推进至 `running`。
-3. 客户端轮询 `GET /api/v1/operations/:id`。
-4. 根据状态渲染运行中/审批中/完成/失败。
+2. 服务调用 `startExecution`，先推进至 `running` 并立即返回 `202`。
+3. 后台异步 `dispatchExecution` 通过 `RunnerGateway` 执行 turn。
+4. 客户端轮询 `GET /api/v1/operations/:id`。
+5. 根据状态渲染运行中/审批中/完成/失败。
 
 ### 4.3 审批流程
 
 1. 操作进入 `waitingApproval` 并生成 `Approval(pending)`。
 2. 用户提交审批决定。
-3. `approve` -> operation 回 `running`；`deny` -> operation 变 `failed`。
+3. `approve` -> route 调用 `resumeAfterApproval`，由 gateway 继续执行并回写状态；
+4. `deny` -> operation 变 `failed`（并记录失败日志）。
 
 ### 4.4 会话查看流程
 
@@ -108,6 +115,12 @@
 11. 过滤生效后，后台轮询也切换为 cursor 增量拉取，减少重复全量详情请求。
 12. 自动增量拉取失败时使用退避重试（指数增长 + 0~25% jitter，成功后恢复基础轮询间隔）。
 13. 页面展示日志轮询状态面板（过滤开关、重试次数、下一次轮询间隔、每个 operation 的 cursor）。
+
+### 4.5 执行后端切换与降级
+
+1. 默认 `EXECUTION_BACKEND=mock`，保证本地与测试稳定。
+2. 显式设置 `EXECUTION_BACKEND=codex` 时，启用 codex app-server gateway。
+3. codex backend 不可用或协议不稳定时，可直接回退到 `mock`。
 
 ## 5. 安全与网络设计
 

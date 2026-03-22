@@ -21,6 +21,29 @@ pnpm dev
 Default runtime in this repo:
 
 - Host/port: `0.0.0.0:43173`
+- Execution backend: `mock` (default)
+
+## Execution Backend (mock/codex)
+
+Default behavior uses `EXECUTION_BACKEND=mock`, which keeps execution deterministic for local development and tests.
+
+To preflight Codex CLI before enabling real execution backend:
+
+```bash
+which codex
+codex --version
+```
+
+Enable codex backend when running dev server:
+
+```bash
+EXECUTION_BACKEND=codex pnpm dev
+```
+
+Fallback strategy:
+
+- If `EXECUTION_BACKEND` is unset or invalid, service falls back to `mock`.
+- Keep `mock` as rollback option when codex runtime/protocol is unstable.
 
 ## Required `.env` (Sanitized Template)
 

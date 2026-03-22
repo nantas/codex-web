@@ -80,11 +80,13 @@
 - 默认端口：`43173`
 - Host 监听：`0.0.0.0`
 - 远程访问：Tailscale 域名
+- 执行后端开关：`EXECUTION_BACKEND=mock|codex`（默认 `mock`）
 
 用途：
 
 - 支持宿主机本地访问与 tailnet 远程访问
 - OAuth 回调统一到可远程访问域名
+- 在 `mock` 与 `codex` 后端间可切换，异常时可快速回退到 `mock`
 
 ## 8. 工程命令（当前）
 
@@ -92,8 +94,10 @@
 - `pnpm start`：生产启动（43173）
 - `pnpm oauth:github`：打开 OAuth 登录页
 - `pnpm lint` / `pnpm typecheck` / `pnpm test` / `pnpm test:e2e`
+- `which codex` / `codex --version`：启用 codex 后端前的本机预检
 
 ## 9. 当前边界
 
 - 已完成 HTTP polling 控制面与认证闭环
-- Codex CLI 的真实执行循环尚未接入（当前为 MVP 骨架与状态流）
+- 已接入执行后端抽象与切换（`mock|codex`），默认仍以 `mock` 作为稳定回退
+- codex app-server 真实协议链路处于 guardrail 阶段（通过 `RUN_CODEX_INTEGRATION` 进行可选集成验证）

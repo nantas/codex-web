@@ -1,17 +1,21 @@
 import { randomUUID } from "node:crypto";
-import type { RunnerHandle } from "./types";
+import type { RunnerRuntime } from "./types";
 
 export class RunnerManager {
-  private readonly byWorkspace = new Map<string, RunnerHandle>();
+  private readonly byWorkspace = new Map<string, RunnerRuntime>();
 
-  async getOrCreate(workspaceId: string): Promise<RunnerHandle> {
+  async getOrCreate(workspaceId: string, input: { cwd: string }): Promise<RunnerRuntime> {
     const existing = this.byWorkspace.get(workspaceId);
     if (existing) return existing;
 
-    const created: RunnerHandle = {
+    const created: RunnerRuntime = {
       id: randomUUID(),
       workspaceId,
-      status: "ready",
+      cwd: input.cwd,
+      endpoint: null,
+      pid: null,
+      status: "starting",
+      lastSeenAt: null,
     };
     this.byWorkspace.set(workspaceId, created);
     return created;
