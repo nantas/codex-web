@@ -14,6 +14,7 @@ import {
   type AppServerTurnRunningEvent,
 } from "@/server/codex/app-server/protocol";
 import { AppServerProcessManager } from "@/server/codex/app-server/process-manager";
+import { matchesTransientSignature } from "@/server/codex/app-server/transient-error-signatures";
 
 const MODERN_TURN_TIMEOUT_MS = 120_000;
 const TURN_POLL_INTERVAL_MS = 300;
@@ -752,12 +753,7 @@ function isTransientThreadReadState(error: unknown) {
     return false;
   }
 
-  const lower = error.message.toLowerCase();
-  return (
-    lower.includes("not materialized yet") ||
-    lower.includes("includeturns is unavailable") ||
-    (lower.includes("failed to load rollout") && lower.includes("empty session file"))
-  );
+  return matchesTransientSignature(error.message);
 }
 
 async function sleep(ms: number) {
